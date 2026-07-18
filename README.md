@@ -31,7 +31,14 @@ All commands are idempotent and support `--dry-run`.
 2. **Vercel:** set your app's connection-string variable (e.g. `NEON_CONNECTION_STRING`)
    in the **Preview** scope, with **no** git branch, pointing at that shared branch. This
    is the fallback that keeps every preview build green.
-3. **GitHub:** add repository secrets `NEON_API_KEY` and `VERCEL_TOKEN`.
+3. **GitHub:** add **repository** secrets `NEON_API_KEY` and `VERCEL_TOKEN`.
+
+   Use repository secrets, not organization secrets. On the GitHub **Free** plan an
+   organization secret can be assigned to a private repository through the API and the
+   UI, but it is **not delivered to the workflow at runtime** — the step sees an empty
+   value and the CLI fails with `Missing required env var: VERCEL_TOKEN`. Verified the
+   hard way, 2026-07-18. One Vercel token may still serve every app (tokens are
+   team-scoped); it just has to be stored in each repository separately.
 4. **Build step:** make your build run migrations in preview only when
    `PREVIEW_DB_ISOLATED === '1'`. Without this guard a half-finished migration from any
    branch would poison the shared branch for every other preview.
