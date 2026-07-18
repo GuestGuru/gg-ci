@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NeonClient } from '../src/neon.js'
+import { mockCallArgs } from './helpers.js'
 
 const CONFIG = {
 	neonApiKey: 'key',
@@ -30,7 +31,7 @@ describe('NeonClient', () => {
 		)
 		const found = await client().findBranchByName('preview/app/pr-1')
 		expect(found).toEqual({ id: 'br-1', name: 'preview/app/pr-1' })
-		const [url, init] = fetchMock.mock.calls[0]
+		const [url, init] = mockCallArgs(fetchMock)
 		expect(url).toBe('https://console.neon.tech/api/v2/projects/proj_1/branches')
 		expect(init.headers.Authorization).toBe('Bearer key')
 	})
@@ -44,7 +45,7 @@ describe('NeonClient', () => {
 		fetchMock.mockResolvedValueOnce(jsonResponse({ branch: { id: 'br-new', name: 'n' } }))
 		const branch = await client().createBranch('n', '2026-08-01T00:00:00.000Z')
 		expect(branch.id).toBe('br-new')
-		const [url, init] = fetchMock.mock.calls[0]
+		const [url, init] = mockCallArgs(fetchMock)
 		expect(url).toBe('https://console.neon.tech/api/v2/projects/proj_1/branches')
 		expect(init.method).toBe('POST')
 		expect(JSON.parse(init.body)).toEqual({
@@ -56,7 +57,7 @@ describe('NeonClient', () => {
 	it('PATCH-csel tolja a lejáratot', async () => {
 		fetchMock.mockResolvedValueOnce(jsonResponse({}))
 		await client().setExpiry('br-1', '2026-08-01T00:00:00.000Z')
-		const [url, init] = fetchMock.mock.calls[0]
+		const [url, init] = mockCallArgs(fetchMock)
 		expect(url).toBe('https://console.neon.tech/api/v2/projects/proj_1/branches/br-1')
 		expect(init.method).toBe('PATCH')
 		expect(JSON.parse(init.body)).toEqual({ branch: { expires_at: '2026-08-01T00:00:00.000Z' } })
@@ -65,7 +66,7 @@ describe('NeonClient', () => {
 	it('a restore endpointtal reseteli a branchet a parentről', async () => {
 		fetchMock.mockResolvedValueOnce(jsonResponse({}))
 		await client().resetFromParent('br-shared')
-		const [url, init] = fetchMock.mock.calls[0]
+		const [url, init] = mockCallArgs(fetchMock)
 		expect(url).toBe('https://console.neon.tech/api/v2/projects/proj_1/branches/br-shared/restore')
 		expect(init.method).toBe('POST')
 		expect(JSON.parse(init.body)).toEqual({ source_branch_id: 'br-parent' })
@@ -74,7 +75,7 @@ describe('NeonClient', () => {
 	it('pooled connection URI-t kér a megadott role-lal és DB-vel', async () => {
 		fetchMock.mockResolvedValueOnce(jsonResponse({ uri: 'postgres://x' }))
 		expect(await client().connectionUri('br-1')).toBe('postgres://x')
-		const [url] = fetchMock.mock.calls[0]
+		const [url] = mockCallArgs(fetchMock)
 		expect(url).toContain('/projects/proj_1/connection_uri?')
 		expect(url).toContain('branch_id=br-1')
 		expect(url).toContain('database_name=app_db')
@@ -85,7 +86,7 @@ describe('NeonClient', () => {
 	it('a 404-es törlést nem tekinti hibának', async () => {
 		fetchMock.mockResolvedValueOnce(new Response('not found', { status: 404 }))
 		await expect(client().deleteBranch('br-gone')).resolves.toBeUndefined()
-		const [url, init] = fetchMock.mock.calls[0]
+		const [url, init] = mockCallArgs(fetchMock)
 		expect(url).toBe('https://console.neon.tech/api/v2/projects/proj_1/branches/br-gone')
 		expect(init.method).toBe('DELETE')
 	})

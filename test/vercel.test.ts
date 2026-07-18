@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { VercelClient } from '../src/vercel.js'
+import { mockCallArgs } from './helpers.js'
 
 const CONFIG = { vercelToken: 'tok', vercelProjectId: 'prj_1', vercelTeamId: 'team_1' }
 
@@ -36,7 +37,7 @@ describe('VercelClient', () => {
 	it('upsert=true-val hozza létre az env vart branch scope-pal', async () => {
 		fetchMock.mockResolvedValueOnce(jsonResponse({ created: {} }, 201))
 		await client().upsertEnv('DB_URL', 'postgres://x', 'feat/x', true)
-		const [url, init] = fetchMock.mock.calls[0]
+		const [url, init] = mockCallArgs(fetchMock)
 		expect(url).toBe('https://api.vercel.com/v10/projects/prj_1/env?upsert=true&teamId=team_1')
 		expect(init.method).toBe('POST')
 		expect(init.headers.Authorization).toBe('Bearer tok')
@@ -52,7 +53,7 @@ describe('VercelClient', () => {
 	it('plain típust használ, ha nem titkos', async () => {
 		fetchMock.mockResolvedValueOnce(jsonResponse({ created: {} }, 201))
 		await client().upsertEnv('FLAG', '1', 'feat/x', false)
-		expect(JSON.parse(fetchMock.mock.calls[0][1].body).type).toBe('plain')
+		expect(JSON.parse(mockCallArgs(fetchMock)[1].body).type).toBe('plain')
 	})
 
 	it('a 404-es env törlést nem tekinti hibának', async () => {
@@ -63,7 +64,7 @@ describe('VercelClient', () => {
 	it('megtalálja a branch legutóbbi preview deployját', async () => {
 		fetchMock.mockResolvedValueOnce(jsonResponse({ deployments: [{ uid: 'dpl_1' }, { uid: 'dpl_0' }] }))
 		expect(await client().latestPreviewDeployment('feat/x')).toBe('dpl_1')
-		const [url] = fetchMock.mock.calls[0]
+		const [url] = mockCallArgs(fetchMock)
 		expect(url).toContain('projectId=prj_1')
 		expect(url).toContain('target=preview')
 		expect(url).toContain(`meta-githubCommitRef=${encodeURIComponent('feat/x')}`)
@@ -77,7 +78,7 @@ describe('VercelClient', () => {
 	it('deploymentId-val kér redeployt', async () => {
 		fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'dpl_2' }))
 		await client().redeploy('dpl_1')
-		const [url, init] = fetchMock.mock.calls[0]
+		const [url, init] = mockCallArgs(fetchMock)
 		expect(url).toBe('https://api.vercel.com/v13/deployments?forceNew=1&teamId=team_1')
 		expect(JSON.parse(init.body)).toEqual({ deploymentId: 'dpl_1', target: 'preview' })
 	})
