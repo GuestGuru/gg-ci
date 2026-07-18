@@ -93,11 +93,16 @@ export class VercelClient {
 		return deployment ? { id: deployment.uid, name: deployment.name } : null
 	}
 
+	/**
+	 * Redeploys an existing deployment. Both `deploymentId` and `name` (the project
+	 * name) are required by the API. `target` is deliberately NOT sent: it only accepts
+	 * 'production', 'staging' or a custom environment, and passing 'preview' returns 400.
+	 * Omitting it inherits the source deployment's preview target.
+	 */
 	async redeploy(deploymentId: string, name: string): Promise<void> {
 		await this.request('POST', `/v13/deployments?forceNew=1&${this.team}`, {
 			deploymentId,
 			name,
-			target: 'preview',
 		})
 	}
 }

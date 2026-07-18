@@ -82,7 +82,9 @@ describe('VercelClient', () => {
 		await client().redeploy('dpl_1', 'my-project')
 		const [url, init] = mockCallArgs(fetchMock)
 		expect(url).toBe('https://api.vercel.com/v13/deployments?forceNew=1&teamId=team_1')
-		expect(JSON.parse(init.body)).toEqual({ deploymentId: 'dpl_1', name: 'my-project', target: 'preview' })
+		// No `target`: Vercel rejects `target: 'preview'` with 400 — that field only accepts
+		// 'production', 'staging' or a custom environment. Omitting it yields a preview deploy.
+		expect(JSON.parse(init.body)).toEqual({ deploymentId: 'dpl_1', name: 'my-project' })
 	})
 
 	it('hibát dob nem-ok válaszra', async () => {
