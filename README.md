@@ -203,6 +203,23 @@ database as orphaned and delete it — taking down every live preview deploy at 
 `open-pr-numbers-known: true` **only** when the command that produced the list actually
 succeeded.
 
+### Vercel API gotchas (learned in production)
+
+`POST /v13/deployments` (used to redeploy a preview so a brand-new PR's first
+deployment picks up its freshly-created env vars):
+
+- `name` — the **project name** — is required alongside `deploymentId`. Without it the
+  API returns `400 Invalid request: missing required property \`name\``. It comes free
+  in the `GET /v6/deployments` response, so no extra round-trip is needed.
+- Do **not** send `target: 'preview'`. That field only accepts `production`, `staging`
+  or a custom environment identifier; `preview` returns
+  `400 Invalid request: \`target\` should be 'production', 'staging', or a custom
+  environment identifier`. Omit it and the redeploy inherits the source deployment's
+  preview target.
+
+Both were found only by calling the real API — unit tests written against an assumed
+contract happily passed while the live call failed.
+
 ### Notes
 
 - Scheduled workflows always run from the **default branch**, so cron changes only take
