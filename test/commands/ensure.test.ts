@@ -28,7 +28,7 @@ function makeDeps() {
 	const vercel = {
 		listBranchEnvs: vi.fn().mockResolvedValue([]),
 		upsertEnv: vi.fn(),
-		latestPreviewDeployment: vi.fn().mockResolvedValue('dpl_1'),
+		latestPreviewDeployment: vi.fn().mockResolvedValue({ id: 'dpl_1', name: 'my-project' }),
 		redeploy: vi.fn(),
 	}
 	return {
@@ -92,7 +92,7 @@ describe('ensure', () => {
 
 		const result = await ensure(ctx.deps, PARAMS)
 
-		expect(ctx.vercel.redeploy).toHaveBeenCalledWith('dpl_1')
+		expect(ctx.vercel.redeploy).toHaveBeenCalledWith('dpl_1', 'my-project')
 		expect(result.redeployed).toBe(true)
 	})
 

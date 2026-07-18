@@ -77,7 +77,7 @@ export class VercelClient {
 		)
 	}
 
-	async latestPreviewDeployment(gitBranch: string): Promise<string | null> {
+	async latestPreviewDeployment(gitBranch: string): Promise<{ id: string; name: string } | null> {
 		const params = new URLSearchParams({
 			projectId: this.config.vercelProjectId,
 			target: 'preview',
@@ -85,16 +85,18 @@ export class VercelClient {
 			'meta-githubCommitRef': gitBranch,
 			teamId: this.config.vercelTeamId,
 		})
-		const result = await this.request<{ deployments: { uid: string }[] }>(
+		const result = await this.request<{ deployments: { uid: string; name: string }[] }>(
 			'GET',
 			`/v6/deployments?${params}`,
 		)
-		return result?.deployments?.[0]?.uid ?? null
+		const deployment = result?.deployments?.[0]
+		return deployment ? { id: deployment.uid, name: deployment.name } : null
 	}
 
-	async redeploy(deploymentId: string): Promise<void> {
+	async redeploy(deploymentId: string, name: string): Promise<void> {
 		await this.request('POST', `/v13/deployments?forceNew=1&${this.team}`, {
 			deploymentId,
+			name,
 			target: 'preview',
 		})
 	}

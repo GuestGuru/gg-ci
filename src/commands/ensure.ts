@@ -58,11 +58,11 @@ export async function ensure(deps: CommandDeps, params: EnsureParams): Promise<E
 	let redeployed = false
 	if (!envExists) {
 		try {
-			const deploymentId = await deps.vercel.latestPreviewDeployment(gitBranch)
-			if (deploymentId) {
-				await deps.vercel.redeploy(deploymentId)
+			const deployment = await deps.vercel.latestPreviewDeployment(gitBranch)
+			if (deployment) {
+				await deps.vercel.redeploy(deployment.id, deployment.name)
 				redeployed = true
-				deps.log(`+ Redeploy requested for ${deploymentId}`)
+				deps.log(`+ Redeploy requested for ${deployment.id}`)
 			} else {
 				deps.log('= No existing preview deployment to redeploy')
 			}

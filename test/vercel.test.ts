@@ -61,9 +61,11 @@ describe('VercelClient', () => {
 		await expect(client().deleteEnv('e1')).resolves.toBeUndefined()
 	})
 
-	it('megtalálja a branch legutóbbi preview deployját', async () => {
-		fetchMock.mockResolvedValueOnce(jsonResponse({ deployments: [{ uid: 'dpl_1' }, { uid: 'dpl_0' }] }))
-		expect(await client().latestPreviewDeployment('feat/x')).toBe('dpl_1')
+	it('megtalálja a branch legutóbbi preview deployjának id-jét és nevét', async () => {
+		fetchMock.mockResolvedValueOnce(
+			jsonResponse({ deployments: [{ uid: 'dpl_1', name: 'my-project' }, { uid: 'dpl_0', name: 'my-project' }] }),
+		)
+		expect(await client().latestPreviewDeployment('feat/x')).toEqual({ id: 'dpl_1', name: 'my-project' })
 		const [url] = mockCallArgs(fetchMock)
 		expect(url).toContain('projectId=prj_1')
 		expect(url).toContain('target=preview')
@@ -75,12 +77,12 @@ describe('VercelClient', () => {
 		expect(await client().latestPreviewDeployment('feat/x')).toBeNull()
 	})
 
-	it('deploymentId-val kér redeployt', async () => {
+	it('deploymentId-val és névvel kér redeployt', async () => {
 		fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'dpl_2' }))
-		await client().redeploy('dpl_1')
+		await client().redeploy('dpl_1', 'my-project')
 		const [url, init] = mockCallArgs(fetchMock)
 		expect(url).toBe('https://api.vercel.com/v13/deployments?forceNew=1&teamId=team_1')
-		expect(JSON.parse(init.body)).toEqual({ deploymentId: 'dpl_1', target: 'preview' })
+		expect(JSON.parse(init.body)).toEqual({ deploymentId: 'dpl_1', name: 'my-project', target: 'preview' })
 	})
 
 	it('hibát dob nem-ok válaszra', async () => {
