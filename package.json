@@ -1,0 +1,20 @@
+{
+  "name": "gg-ci",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "GuestGuru cross-app CI infrastructure",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "neon-preview": "tsx src/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.3",
+    "vitest": "^3.0.0"
+  }
+}
