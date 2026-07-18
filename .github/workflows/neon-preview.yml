@@ -11,16 +11,46 @@ on:
         description: "ensure | destroy | refresh-ttl | reset-shared"
         required: true
         type: string
-      neon-project-id: { required: true, type: string }
-      parent-branch-id: { required: true, type: string }
-      role-name: { required: true, type: string }
-      database-name: { required: true, type: string }
-      vercel-project-id: { required: true, type: string }
-      vercel-team-id: { required: true, type: string }
-      branch-prefix: { required: true, type: string }
-      shared-branch-name: { required: true, type: string }
-      env-var-name: { required: true, type: string }
-      ttl-days: { required: true, type: number }
+      neon-project-id:
+        description: "Neon project ID that owns both the parent branch and every preview branch this workflow creates/deletes (Neon console → project settings, or `neonctl projects list`)."
+        required: true
+        type: string
+      parent-branch-id:
+        description: "Neon branch ID that new preview branches are forked FROM — passed as parent_id when creating a PR branch, and as source_branch_id when resetting the shared branch. Typically the production branch's ID."
+        required: true
+        type: string
+      role-name:
+        description: "Name of an existing Neon Postgres role, combined with database-name to build the connection URI for each forked branch. Not created by this workflow — must already exist on the parent branch."
+        required: true
+        type: string
+      database-name:
+        description: "Name of an existing Neon database, combined with role-name to build the connection URI for each forked branch. Not created by this workflow — must already exist on the parent branch."
+        required: true
+        type: string
+      vercel-project-id:
+        description: "Vercel project ID that owns the preview deployments this workflow manages (Vercel project → Settings → General, or `vercel project ls`)."
+        required: true
+        type: string
+      vercel-team-id:
+        description: "Vercel team (organization) ID that owns the project above — required by the Vercel API alongside the project ID (team → Settings → General, or `vercel teams ls`)."
+        required: true
+        type: string
+      branch-prefix:
+        description: "Namespace for this app's preview branches. Each PR's Neon branch is named <branch-prefix>/pr-<number>; refresh-ttl only ever deletes branches under this prefix, so production, other long-lived branches, and other apps' previews sharing the Neon project are never touched."
+        required: true
+        type: string
+      shared-branch-name:
+        description: "Name of the long-lived fallback Neon branch that preview deployments point at before their own PR branch exists. The weekly reset-shared command resets this branch from parent-branch-id so it never drifts from production."
+        required: true
+        type: string
+      env-var-name:
+        description: "Vercel environment-variable key this workflow writes the forked branch's connection URI into (Preview scope, scoped to the PR's git branch). Must exactly match the key your application code reads for its database connection string (e.g. DATABASE_URL)."
+        required: true
+        type: string
+      ttl-days:
+        description: "Days a preview branch may live without being refreshed before Neon auto-expires it. ensure sets expires_at this far out when creating/reusing a branch; the daily refresh-ttl cron extends it again for every still-open PR."
+        required: true
+        type: number
       pr-number:
         description: "Required for ensure/destroy"
         required: false
@@ -39,6 +69,7 @@ on:
         type: boolean
         default: false
       dry-run:
+        description: "Logs the actions that would be taken without calling the Neon or Vercel APIs."
         required: false
         type: boolean
         default: false

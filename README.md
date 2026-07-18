@@ -44,6 +44,27 @@ All commands are idempotent and support `--dry-run`.
 orphaned branches (see "Why `open-pr-numbers-known` matters" below). The example computes
 that list with `gh pr list` in its own job and passes it down.
 
+#### Inputs
+
+| Input | Type | Required | Meaning |
+|---|---|---|---|
+| `command` | string | yes | `ensure` \| `destroy` \| `refresh-ttl` \| `reset-shared` |
+| `neon-project-id` | string | yes | Neon project ID that owns both the parent branch and every preview branch this workflow creates/deletes. |
+| `parent-branch-id` | string | yes | Neon branch ID that new preview branches are forked FROM (`parent_id` on create, `source_branch_id` on `reset-shared`). Typically the production branch's ID. |
+| `role-name` | string | yes | Existing Neon Postgres role used to build each forked branch's connection URI. Not created by this workflow. |
+| `database-name` | string | yes | Existing Neon database used to build each forked branch's connection URI. Not created by this workflow. |
+| `vercel-project-id` | string | yes | Vercel project ID that owns the preview deployments this workflow manages. |
+| `vercel-team-id` | string | yes | Vercel team (organization) ID that owns the project above. |
+| `branch-prefix` | string | yes | Namespace for this app's preview branches; branches are named `<branch-prefix>/pr-<number>`. Only branches under this prefix are ever deleted by cleanup. |
+| `shared-branch-name` | string | yes | Long-lived fallback Neon branch that `reset-shared` resets from `parent-branch-id`. |
+| `env-var-name` | string | yes | Vercel Preview env var key the connection URI is written to. Must match what your app's code actually reads. |
+| `ttl-days` | number | yes | Days a preview branch may go unrefreshed before Neon auto-expires it. |
+| `pr-number` | number | only for `ensure`/`destroy` | The pull request number. |
+| `git-branch` | string | only for `ensure`/`destroy` | The PR's head ref, used to scope the Vercel env vars. |
+| `open-pr-numbers` | string | only for `refresh-ttl` | Comma-separated open PR numbers; only read when `open-pr-numbers-known` is `true`. |
+| `open-pr-numbers-known` | boolean | no (default `false`) | `true` if the caller successfully determined the open PR list (even if empty); `false` skips cleanup entirely. |
+| `dry-run` | boolean | no (default `false`) | Logs the actions that would be taken without calling the Neon/Vercel APIs. |
+
 ```yaml
 on:
   pull_request:
@@ -61,7 +82,16 @@ jobs:
       command: ensure
       pr-number: ${{ github.event.pull_request.number }}
       git-branch: ${{ github.event.pull_request.head.ref }}
-      # ... your identifiers
+      neon-project-id: your-neon-project-id
+      parent-branch-id: your-neon-parent-branch-id
+      role-name: your_neon_role
+      database-name: your_database_name
+      vercel-project-id: your-vercel-project-id
+      vercel-team-id: your-vercel-team-id
+      branch-prefix: myapp-preview
+      shared-branch-name: preview-shared
+      env-var-name: DATABASE_URL
+      ttl-days: 3
     secrets:
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -73,7 +103,16 @@ jobs:
       command: destroy
       pr-number: ${{ github.event.pull_request.number }}
       git-branch: ${{ github.event.pull_request.head.ref }}
-      # ... your identifiers
+      neon-project-id: your-neon-project-id
+      parent-branch-id: your-neon-parent-branch-id
+      role-name: your_neon_role
+      database-name: your_database_name
+      vercel-project-id: your-vercel-project-id
+      vercel-team-id: your-vercel-team-id
+      branch-prefix: myapp-preview
+      shared-branch-name: preview-shared
+      env-var-name: DATABASE_URL
+      ttl-days: 3
     secrets:
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -107,7 +146,16 @@ jobs:
       command: refresh-ttl
       open-pr-numbers: ${{ needs.list-open-prs.outputs.numbers }}
       open-pr-numbers-known: ${{ needs.list-open-prs.outputs.known == 'true' }}
-      # ... your identifiers
+      neon-project-id: your-neon-project-id
+      parent-branch-id: your-neon-parent-branch-id
+      role-name: your_neon_role
+      database-name: your_database_name
+      vercel-project-id: your-vercel-project-id
+      vercel-team-id: your-vercel-team-id
+      branch-prefix: myapp-preview
+      shared-branch-name: preview-shared
+      env-var-name: DATABASE_URL
+      ttl-days: 3
     secrets:
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -117,7 +165,16 @@ jobs:
     uses: GuestGuru/gg-ci/.github/workflows/neon-preview.yml@main
     with:
       command: reset-shared
-      # ... your identifiers
+      neon-project-id: your-neon-project-id
+      parent-branch-id: your-neon-parent-branch-id
+      role-name: your_neon_role
+      database-name: your_database_name
+      vercel-project-id: your-vercel-project-id
+      vercel-team-id: your-vercel-team-id
+      branch-prefix: myapp-preview
+      shared-branch-name: preview-shared
+      env-var-name: DATABASE_URL
+      ttl-days: 3
     secrets:
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
