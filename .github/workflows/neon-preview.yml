@@ -30,9 +30,14 @@ on:
         required: false
         type: string
       open-pr-numbers:
-        description: "Comma-separated open PR numbers. Required for refresh-ttl; omit to skip cleanup."
+        description: "Comma-separated open PR numbers. Only used when open-pr-numbers-known is true."
         required: false
         type: string
+      open-pr-numbers-known:
+        description: "true if the caller successfully determined the open PR list (even if empty). When false, cleanup is skipped."
+        required: false
+        type: boolean
+        default: false
       dry-run:
         required: false
         type: boolean
@@ -58,22 +63,54 @@ jobs:
       - run: npm ci
 
       - name: Run neon-preview ${{ inputs.command }}
+        shell: bash
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          COMMAND: ${{ inputs.command }}
+          NEON_PROJECT_ID: ${{ inputs.neon-project-id }}
+          PARENT_BRANCH_ID: ${{ inputs.parent-branch-id }}
+          ROLE_NAME: ${{ inputs.role-name }}
+          DATABASE_NAME: ${{ inputs.database-name }}
+          VERCEL_PROJECT_ID: ${{ inputs.vercel-project-id }}
+          VERCEL_TEAM_ID: ${{ inputs.vercel-team-id }}
+          BRANCH_PREFIX: ${{ inputs.branch-prefix }}
+          SHARED_BRANCH_NAME: ${{ inputs.shared-branch-name }}
+          ENV_VAR_NAME: ${{ inputs.env-var-name }}
+          TTL_DAYS: ${{ inputs.ttl-days }}
+          PR_NUMBER: ${{ inputs.pr-number }}
+          GIT_BRANCH: ${{ inputs.git-branch }}
+          OPEN_PR_NUMBERS: ${{ inputs.open-pr-numbers }}
+          OPEN_PR_NUMBERS_KNOWN: ${{ inputs.open-pr-numbers-known }}
+          DRY_RUN: ${{ inputs.dry-run }}
         run: |
-          npm run neon-preview -- "${{ inputs.command }}" \
-            --neon-project-id="${{ inputs.neon-project-id }}" \
-            --parent-branch-id="${{ inputs.parent-branch-id }}" \
-            --role-name="${{ inputs.role-name }}" \
-            --database-name="${{ inputs.database-name }}" \
-            --vercel-project-id="${{ inputs.vercel-project-id }}" \
-            --vercel-team-id="${{ inputs.vercel-team-id }}" \
-            --branch-prefix="${{ inputs.branch-prefix }}" \
-            --shared-branch-name="${{ inputs.shared-branch-name }}" \
-            --env-var-name="${{ inputs.env-var-name }}" \
-            --ttl-days="${{ inputs.ttl-days }}" \
-            ${{ inputs.pr-number && format('--pr-number={0}', inputs.pr-number) || '' }} \
-            ${{ inputs.git-branch && format('--git-branch={0}', inputs.git-branch) || '' }} \
-            ${{ inputs.open-pr-numbers != '' && format('--open-pr-numbers={0}', inputs.open-pr-numbers) || '' }} \
-            ${{ inputs.dry-run && '--dry-run' || '' }}
+          args=(
+            --neon-project-id="$NEON_PROJECT_ID"
+            --parent-branch-id="$PARENT_BRANCH_ID"
+            --role-name="$ROLE_NAME"
+            --database-name="$DATABASE_NAME"
+            --vercel-project-id="$VERCEL_PROJECT_ID"
+            --vercel-team-id="$VERCEL_TEAM_ID"
+            --branch-prefix="$BRANCH_PREFIX"
+            --shared-branch-name="$SHARED_BRANCH_NAME"
+            --env-var-name="$ENV_VAR_NAME"
+            --ttl-days="$TTL_DAYS"
+          )
+
+          if [[ -n "$PR_NUMBER" ]]; then
+            args+=(--pr-number="$PR_NUMBER")
+          fi
+
+          if [[ -n "$GIT_BRANCH" ]]; then
+            args+=(--git-branch="$GIT_BRANCH")
+          fi
+
+          if [[ "$OPEN_PR_NUMBERS_KNOWN" == "true" ]]; then
+            args+=(--open-pr-numbers="$OPEN_PR_NUMBERS")
+          fi
+
+          if [[ "$DRY_RUN" == "true" ]]; then
+            args+=(--dry-run)
+          fi
+
+          npm run neon-preview -- "$COMMAND" "${args[@]}"
