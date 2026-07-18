@@ -37,7 +37,7 @@ export class NeonClient {
 			body: body ? JSON.stringify(body) : undefined,
 		})
 		if (okStatuses.includes(res.status)) return undefined
-		const text = await res.clone().text()
+		const text = await res.text()
 		if (!res.ok) {
 			throw new Error(`Neon API ${method} ${route} → ${res.status}: ${text}`)
 		}

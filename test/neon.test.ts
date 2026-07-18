@@ -85,6 +85,9 @@ describe('NeonClient', () => {
 	it('a 404-es törlést nem tekinti hibának', async () => {
 		fetchMock.mockResolvedValueOnce(new Response('not found', { status: 404 }))
 		await expect(client().deleteBranch('br-gone')).resolves.toBeUndefined()
+		const [url, init] = fetchMock.mock.calls[0]
+		expect(url).toBe('https://console.neon.tech/api/v2/projects/proj_1/branches/br-gone')
+		expect(init.method).toBe('DELETE')
 	})
 
 	it('hibát dob nem-ok válaszra', async () => {
@@ -101,7 +104,9 @@ describe('NeonClient', () => {
 	})
 
 	it('a waitReady hibázik timeout után', async () => {
-		fetchMock.mockResolvedValue(jsonResponse({ branches: [{ id: 'br-1', name: 'n', current_state: 'init' }] }))
+		fetchMock.mockImplementation(() =>
+			Promise.resolve(jsonResponse({ branches: [{ id: 'br-1', name: 'n', current_state: 'init' }] })),
+		)
 		await expect(client().waitReady('br-1', 1, 0)).rejects.toThrow(/did not become ready/)
 	})
 })
