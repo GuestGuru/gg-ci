@@ -105,8 +105,9 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv): ParsedArgs {
 	const parsed: ParsedArgs = { command, config, dryRun: flags.has('dry-run') }
 
 	if (command === 'ensure' || command === 'destroy') {
-		parsed.prNumber = Number(required(flags, 'pr-number'))
-		if (!Number.isInteger(parsed.prNumber)) throw new Error('Invalid --pr-number')
+		const prNumberRaw = required(flags, 'pr-number')
+		parsed.prNumber = Number(prNumberRaw)
+		if (!Number.isInteger(parsed.prNumber)) throw new Error(`Invalid --pr-number: ${prNumberRaw}`)
 		parsed.gitBranch = required(flags, 'git-branch')
 	}
 

@@ -44,6 +44,11 @@ describe('parseArgs', () => {
 		expect(result.openPrNumbers).toEqual([])
 	})
 
+	it('teljesen hiányzó open-pr-numbers undefined marad', () => {
+		const result = parseArgs(['refresh-ttl', ...BASE], ENV)
+		expect(result.openPrNumbers).toBeUndefined()
+	})
+
 	it('hibázik ismeretlen parancsra', () => {
 		expect(() => parseArgs(['nope', ...BASE], ENV)).toThrow(/Unknown command/)
 	})
