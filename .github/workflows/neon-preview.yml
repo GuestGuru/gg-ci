@@ -1,0 +1,79 @@
+# Reusable workflow: per-PR Neon preview branch + branch-scoped Vercel preview env.
+#
+# Every app-specific value is a required input — this repository is PUBLIC and must
+# never contain GuestGuru infrastructure identifiers. Do NOT add default values.
+name: Neon preview branch
+
+on:
+  workflow_call:
+    inputs:
+      command:
+        description: "ensure | destroy | refresh-ttl | reset-shared"
+        required: true
+        type: string
+      neon-project-id: { required: true, type: string }
+      parent-branch-id: { required: true, type: string }
+      role-name: { required: true, type: string }
+      database-name: { required: true, type: string }
+      vercel-project-id: { required: true, type: string }
+      vercel-team-id: { required: true, type: string }
+      branch-prefix: { required: true, type: string }
+      shared-branch-name: { required: true, type: string }
+      env-var-name: { required: true, type: string }
+      ttl-days: { required: true, type: number }
+      pr-number:
+        description: "Required for ensure/destroy"
+        required: false
+        type: number
+      git-branch:
+        description: "Required for ensure/destroy — the PR head ref"
+        required: false
+        type: string
+      open-pr-numbers:
+        description: "Comma-separated open PR numbers. Required for refresh-ttl; omit to skip cleanup."
+        required: false
+        type: string
+      dry-run:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      NEON_API_KEY: { required: true }
+      VERCEL_TOKEN: { required: true }
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          repository: GuestGuru/gg-ci
+          ref: main
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run neon-preview ${{ inputs.command }}
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          npm run neon-preview -- "${{ inputs.command }}" \
+            --neon-project-id="${{ inputs.neon-project-id }}" \
+            --parent-branch-id="${{ inputs.parent-branch-id }}" \
+            --role-name="${{ inputs.role-name }}" \
+            --database-name="${{ inputs.database-name }}" \
+            --vercel-project-id="${{ inputs.vercel-project-id }}" \
+            --vercel-team-id="${{ inputs.vercel-team-id }}" \
+            --branch-prefix="${{ inputs.branch-prefix }}" \
+            --shared-branch-name="${{ inputs.shared-branch-name }}" \
+            --env-var-name="${{ inputs.env-var-name }}" \
+            --ttl-days="${{ inputs.ttl-days }}" \
+            ${{ inputs.pr-number && format('--pr-number={0}', inputs.pr-number) || '' }} \
+            ${{ inputs.git-branch && format('--git-branch={0}', inputs.git-branch) || '' }} \
+            ${{ inputs.open-pr-numbers != '' && format('--open-pr-numbers={0}', inputs.open-pr-numbers) || '' }} \
+            ${{ inputs.dry-run && '--dry-run' || '' }}
