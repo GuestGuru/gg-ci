@@ -27,7 +27,18 @@ export async function refreshTtl(deps: CommandDeps, params: RefreshParams): Prom
 
 	const openBranchNames = new Set(openPrNumbers.map((pr) => branchNameForPr(config.branchPrefix, pr)))
 	const toRefresh = branches.filter((branch) => openBranchNames.has(branch.name))
-	const orphans = selectOrphanBranches(config.branchPrefix, branches, openPrNumbers)
+	// A Neon API snake_case-t ad, a szelekció camelCase-t vár — a leképezés nélkül a
+	// `creation_source` guard csendben soha nem aktiválódna, és a natív integráció
+	// élő preview brancheit törölhetnénk.
+	const orphans = selectOrphanBranches(
+		config.branchPrefix,
+		branches.map((branch) => ({
+			id: branch.id,
+			name: branch.name,
+			creationSource: branch.creation_source,
+		})),
+		openPrNumbers,
+	)
 
 	if (dryRun) {
 		deps.log(`[dry-run] would refresh TTL on: ${toRefresh.map((b) => b.name).join(', ') || '(none)'}`)

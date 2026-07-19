@@ -65,6 +65,25 @@ describe('selectOrphanBranches', () => {
 		expect(names).not.toContain('preview/other-app/pr-1')
 	})
 
+	it('SOHA nem töröl a Vercel-integráció által létrehozott branchet', () => {
+		// A natív Neon–Vercel integráció a GIT BRANCH nevéből képzi a Neon branch nevét
+		// (`preview/<git-branch>`), tehát egy szomszéd appban létrehozott `app/pr-7` nevű
+		// git branchből `preview/app/pr-7` Neon branch lesz — ami illeszkedne a mintánkra.
+		// A creation_source='vercel' ezt technikailag zárja ki, nem konvencióval.
+		const mixed = [
+			{ id: 'br-ours', name: 'preview/app/pr-5', creationSource: 'console' },
+			{ id: 'br-theirs', name: 'preview/app/pr-7', creationSource: 'vercel' },
+		]
+		expect(selectOrphanBranches(prefix, mixed, [])).toEqual([
+			{ id: 'br-ours', name: 'preview/app/pr-5', creationSource: 'console' },
+		])
+	})
+
+	it('ismeretlen creation_source esetén töröl (visszafelé kompatibilis)', () => {
+		const legacy = [{ id: 'br-1', name: 'preview/app/pr-5' }]
+		expect(selectOrphanBranches(prefix, legacy, [])).toEqual(legacy)
+	})
+
 	it('üres, ha minden PR nyitva van', () => {
 		expect(selectOrphanBranches(prefix, branches, [1, 2, 3])).toEqual([])
 	})

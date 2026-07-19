@@ -18,10 +18,12 @@ const CONFIG: Config = {
 }
 
 const BRANCHES = [
-	{ id: 'br-1', name: 'preview/app/pr-1' },
-	{ id: 'br-2', name: 'preview/app/pr-2' },
-	{ id: 'br-shared', name: 'preview-shared' },
-	{ id: 'br-prod', name: 'production' },
+	{ id: 'br-1', name: 'preview/app/pr-1', creation_source: 'console' },
+	{ id: 'br-2', name: 'preview/app/pr-2', creation_source: 'console' },
+	{ id: 'br-shared', name: 'preview-shared', creation_source: 'console' },
+	{ id: 'br-prod', name: 'production', creation_source: 'console' },
+	// A natív Neon–Vercel integráció branche: névre illeszkedne, de NEM a miénk.
+	{ id: 'br-native', name: 'preview/app/pr-9', creation_source: 'vercel' },
 ]
 
 function makeDeps() {
@@ -82,6 +84,14 @@ describe('refreshTtl', () => {
 
 		expect(ctx.neon.deleteBranch).toHaveBeenCalledTimes(2)
 		expect(result).toEqual({ refreshed: 0, deleted: 2, skippedCleanup: false })
+	})
+
+	it('a Vercel-integráció branchét soha nem törli, akkor sem ha illeszkedik a névre', async () => {
+		await refreshTtl(ctx.deps, { config: CONFIG, openPrNumbers: [], dryRun: false })
+
+		expect(ctx.neon.deleteBranch).not.toHaveBeenCalledWith('br-native')
+		expect(ctx.neon.deleteBranch).toHaveBeenCalledWith('br-1')
+		expect(ctx.neon.deleteBranch).toHaveBeenCalledWith('br-2')
 	})
 
 	it('dry-run módban semmit nem módosít', async () => {

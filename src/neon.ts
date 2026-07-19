@@ -5,6 +5,8 @@ export interface NeonBranch {
 	name: string
 	current_state?: string
 	expires_at?: string
+	/** 'vercel' when the native Neon–Vercel integration created the branch. */
+	creation_source?: string
 }
 
 export interface NeonConfig {
