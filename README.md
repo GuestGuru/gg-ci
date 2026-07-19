@@ -238,6 +238,17 @@ deployment picks up its freshly-created env vars):
 Both were found only by calling the real API — unit tests written against an assumed
 contract happily passed while the live call failed.
 
+### Current limitation: one connection string per app
+
+`ensure` writes exactly **one** connection-string variable (`env-var-name`), plus the
+`PREVIEW_DB_ISOLATED` flag. It always requests Neon's **pooled** URI.
+
+An app that also needs the **unpooled/direct** URI — some libraries require it, e.g.
+better-auth's Postgres adapter — is therefore not fully served yet. Neon exposes it via
+the same `connection_uri` endpoint with `pooled=false`, so the fix is small: an optional
+second input (e.g. `unpooled-env-var-name`) that, when set, writes the direct URI
+alongside the pooled one. Not implemented — add it when the first such app onboards.
+
 ### Notes
 
 - Scheduled workflows always run from the **default branch**, so cron changes only take
