@@ -98,7 +98,11 @@ jobs:
 
           # The CLI prints `preview-url=<url>` on its own line; npm's banner lines
           # are filtered out by anchoring the match at the start of the line.
-          url="$(grep -m1 '^preview-url=' cli-output.log | cut -d= -f2-)"
+          # `|| true` is required: `shell: bash` runs with `-e`, and grep exits 1 when
+          # there is no match — which is the NORMAL case for `remove`, since only `set`
+          # prints a URL. Without it the step fails after the alias was already removed
+          # successfully (observed on BPDB PR #5, 2026-07-19).
+          url="$(grep -m1 '^preview-url=' cli-output.log | cut -d= -f2- || true)"
           if [[ -n "$url" ]]; then
             echo "preview-url=$url" >> "$GITHUB_OUTPUT"
           fi
