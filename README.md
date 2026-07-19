@@ -335,15 +335,42 @@ jobs:
       pull-requests: read
     outputs:
       number: ${{ steps.pr.outputs.number }}
+      deployment-id: ${{ steps.deployment.outputs.id }}
     steps:
       - id: pr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REF: ${{ github.event.deployment.ref }}
         run: |
-          number=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$REF" --state open \
-            --json number --jq '.[0].number // ""')
+          # Vercel puts a commit SHA in `deployment.ref`, not a branch name,
+          # so resolve the PR through the commit. The branch-name lookup is a
+          # fallback for integrations that do send a ref.
+          number=$(gh api "repos/$GITHUB_REPOSITORY/commits/$REF/pulls" \
+            --jq '[.[] | select(.state == "open")][0].number // ""' 2>/dev/null || echo "")
+          if [[ -z "$number" ]]; then
+            number=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$REF" --state open \
+              --json number --jq '.[0].number // ""' 2>/dev/null || echo "")
+          fi
           echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      # Vercel sends an EMPTY deployment payload, so there is no deploymentId
+      # to read. The status's target_url carries the preview hostname, and the
+      # Vercel API accepts a hostname wherever it accepts a deployment ID.
+      - id: deployment
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          TARGET_URL: ${{ github.event.deployment_status.target_url }}
+          TEAM_ID: your-vercel-team-id
+        run: |
+          host="${TARGET_URL#https://}"
+          host="${host%%/*}"
+          id=$(curl -sf "https://api.vercel.com/v13/deployments/${host}?teamId=${TEAM_ID}" \
+            -H "Authorization: Bearer $VERCEL_TOKEN" | jq -r '.id // ""')
+          if [[ -z "$id" ]]; then
+            echo "Could not resolve a deployment ID from: $host"
+            exit 1
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
 
   alias:
     needs: find-pr
@@ -351,7 +378,7 @@ jobs:
     uses: GuestGuru/gg-ci/.github/workflows/preview-alias.yml@main
     with:
       command: set
-      deployment-id: ${{ github.event.deployment.payload.deploymentId }}
+      deployment-id: ${{ needs.find-pr.outputs.deployment-id }}
       alias-host: myapp-pr-${{ needs.find-pr.outputs.number }}.preview.example.com
       vercel-project-id: your-vercel-project-id
       vercel-team-id: your-vercel-team-id
@@ -372,6 +399,23 @@ jobs:
 
 To comment the URL on the PR, add a job that consumes `needs.alias.outputs.preview-url`
 in your own repository — that keeps the GitHub-specific part on your side.
+
+#### What the Vercel deployment event actually contains
+
+Both facts below were measured against a live Vercel–GitHub integration
+(2026-07-19) and contradict the obvious reading of GitHub's `deployment_status`
+schema. The caller example above already accounts for them.
+
+- **`deployment.ref` is a commit SHA, not a branch name.** `gh pr list --head "$REF"`
+  therefore matches nothing and the alias job is skipped — silently, since "no PR
+  found" is a legitimate outcome for a non-PR deployment. Resolve the PR through
+  `repos/{owner}/{repo}/commits/{sha}/pulls` instead.
+- **`deployment.payload` is an empty object (`{}`).** There is no `deploymentId`
+  in it, so passing `deployment.payload.deploymentId` sends an empty string and
+  `alias-set` fails with `Missing required argument: --deployment-id`. The
+  deployment is instead identified by the hostname in
+  `deployment_status.target_url`: `GET /v13/deployments/{hostname}` returns the
+  real `dpl_...` ID.
 
 #### Vercel alias API notes
 
