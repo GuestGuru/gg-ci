@@ -65,6 +65,7 @@ that list with `gh pr list` in its own job and passes it down.
 | `branch-prefix` | string | yes | Namespace for this app's preview branches; branches are named `<branch-prefix>/pr-<number>`. Only branches under this prefix are ever deleted by cleanup. |
 | `shared-branch-name` | string | yes | Long-lived fallback Neon branch that `reset-shared` resets from `parent-branch-id`. |
 | `env-var-name` | string | yes | Vercel Preview env var key the connection URI is written to. Must match what your app's code actually reads. |
+| `unpooled-env-var-name` | string | no | Second Preview env var key that receives the same branch's **unpooled** (direct) URI. Set it only if your app needs a direct connection; unset writes the pooled URI only. |
 | `ttl-days` | number | yes | Days a preview branch may go unrefreshed before Neon auto-expires it. |
 | `pr-number` | number | only for `ensure`/`destroy` | The pull request number. |
 | `git-branch` | string | only for `ensure`/`destroy` | The PR's head ref, used to scope the Vercel env vars. |
@@ -98,6 +99,9 @@ jobs:
       branch-prefix: myapp-preview
       shared-branch-name: preview-shared
       env-var-name: DATABASE_URL
+      # Optional — only if your app also needs a direct (unpooled) connection.
+      # Must be repeated on the destroy job so the var gets cleaned up.
+      unpooled-env-var-name: DATABASE_URL_UNPOOLED
       ttl-days: 3
     secrets:
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
@@ -119,6 +123,7 @@ jobs:
       branch-prefix: myapp-preview
       shared-branch-name: preview-shared
       env-var-name: DATABASE_URL
+      unpooled-env-var-name: DATABASE_URL_UNPOOLED # optional, see above
       ttl-days: 3
     secrets:
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
@@ -238,16 +243,16 @@ deployment picks up its freshly-created env vars):
 Both were found only by calling the real API — unit tests written against an assumed
 contract happily passed while the live call failed.
 
-### Current limitation: one connection string per app
+### Pooled and unpooled connection strings
 
-`ensure` writes exactly **one** connection-string variable (`env-var-name`), plus the
-`PREVIEW_DB_ISOLATED` flag. It always requests Neon's **pooled** URI.
+`ensure` always writes the **pooled** URI into `env-var-name`, plus the
+`PREVIEW_DB_ISOLATED` flag.
 
-An app that also needs the **unpooled/direct** URI — some libraries require it, e.g.
-better-auth's Postgres adapter — is therefore not fully served yet. Neon exposes it via
-the same `connection_uri` endpoint with `pooled=false`, so the fix is small: an optional
-second input (e.g. `unpooled-env-var-name`) that, when set, writes the direct URI
-alongside the pooled one. Not implemented — add it when the first such app onboards.
+Some libraries and migration tools cannot go through the connection pooler and need the
+**unpooled/direct** URI instead. Set the optional `unpooled-env-var-name` input and
+`ensure` requests the same branch's URI a second time with `pooled=false`, writing it into
+that key on the same Preview + git-branch scope; `destroy` removes it along with the
+others. Leave the input unset and nothing changes — only the pooled URI is written.
 
 ### Notes
 

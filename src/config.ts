@@ -26,6 +26,11 @@ export interface Config {
 	branchPrefix: string
 	sharedBranchName: string
 	envVarName: string
+	/**
+	 * Optional second env var key that receives the *unpooled* (direct) URI of the
+	 * same branch. Left unset, nothing about the pooled-only behaviour changes.
+	 */
+	unpooledEnvVarName?: string
 	ttlDays: number
 }
 
@@ -101,6 +106,9 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv): ParsedArgs {
 	const branchPrefix = required(flags, 'branch-prefix')
 	const sharedBranchName = required(flags, 'shared-branch-name')
 	const envVarName = required(flags, 'env-var-name')
+	// Optional: an empty value is the same as not passing it at all, because the
+	// reusable workflow renders an unset string input as an empty string.
+	const unpooledEnvVarName = flags.get('unpooled-env-var-name') || undefined
 	const ttlRaw = required(flags, 'ttl-days')
 
 	// Now do numeric parsing
@@ -121,6 +129,7 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv): ParsedArgs {
 		branchPrefix,
 		sharedBranchName,
 		envVarName,
+		unpooledEnvVarName,
 		ttlDays,
 	}
 

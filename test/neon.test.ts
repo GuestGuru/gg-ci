@@ -83,6 +83,14 @@ describe('NeonClient', () => {
 		expect(url).toContain('pooled=true')
 	})
 
+	it('pooled=false-szal a direkt (unpooled) URI-t kéri', async () => {
+		fetchMock.mockResolvedValueOnce(jsonResponse({ uri: 'postgres://direct' }))
+		expect(await client().connectionUri('br-1', false)).toBe('postgres://direct')
+		const [url] = mockCallArgs(fetchMock)
+		expect(url).toContain('branch_id=br-1')
+		expect(url).toContain('pooled=false')
+	})
+
 	it('a 404-es törlést nem tekinti hibának', async () => {
 		fetchMock.mockResolvedValueOnce(new Response('not found', { status: 404 }))
 		await expect(client().deleteBranch('br-gone')).resolves.toBeUndefined()
