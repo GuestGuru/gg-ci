@@ -203,6 +203,24 @@ database as orphaned and delete it — taking down every live preview deploy at 
 `open-pr-numbers-known: true` **only** when the command that produced the list actually
 succeeded.
 
+### Sharing a Neon project with the native integration
+
+A Neon project can attach the native Neon–Vercel integration to exactly **one** Vercel
+project. Everything else in that project uses this workflow — so both systems create
+branches side by side, and cleanup must never touch the other's.
+
+Two independent protections:
+
+1. **Prefix.** Cleanup only ever considers branches matching `^<branch-prefix>/pr-<n>$`,
+   with the prefix regex-escaped. Give each app its own prefix (`preview/gg-tracker`,
+   `preview/bpdb`).
+2. **`creation_source`.** The native integration names its branches after the *git
+   branch* (`preview/<git-branch>`), so a sibling repo's branch called `<app>/pr-7`
+   would produce a name indistinguishable from ours. Cleanup therefore also refuses to
+   delete any branch Neon reports with `creation_source: 'vercel'`. This makes the
+   separation a technical guarantee rather than a naming convention that a developer —
+   or an agent creating a feature branch — could unknowingly violate.
+
 ### Vercel API gotchas (learned in production)
 
 `POST /v13/deployments` (used to redeploy a preview so a brand-new PR's first
