@@ -254,6 +254,18 @@ Some libraries and migration tools cannot go through the connection pooler and n
 that key on the same Preview + git-branch scope; `destroy` removes it along with the
 others. Leave the input unset and nothing changes — only the pooled URI is written.
 
+### Testing a change to these workflows
+
+The reusable workflows check out the CLI at `github.job_workflow_sha` — the
+commit the workflow YAML itself came from. Pointing a caller at a branch
+(`neon-preview.yml@my-branch`) therefore runs that branch's CLI too, so a change
+can be validated before it lands on `main`.
+
+This was not always the case: the checkout was pinned to `ref: main`, which made
+every test run execute main's code. An input added on a branch reached a CLI
+that did not know it and dropped it silently — a green run that did nothing.
+Found while onboarding `GuestGuru/tools`, 2026-07-19.
+
 ### Notes
 
 - Scheduled workflows always run from the **default branch**, so cron changes only take
