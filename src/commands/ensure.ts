@@ -23,11 +23,18 @@ export async function ensure(deps: CommandDeps, params: EnsureParams): Promise<E
 
 	const existing = await deps.neon.findBranchByName(branchName)
 	const existingEnvs = await deps.vercel.listBranchEnvs(gitBranch)
-	const envExists = existingEnvs.some((env) => env.key === config.envVarName)
+	const hasEnv = (key: string): boolean => existingEnvs.some((env) => env.key === key)
+	// The unpooled var counts too: an app that adds the input to an already-open PR
+	// must get a redeploy, otherwise the running deployment never sees the new var.
+	const envExists =
+		hasEnv(config.envVarName) && (!config.unpooledEnvVarName || hasEnv(config.unpooledEnvVarName))
 
 	if (dryRun) {
 		deps.log(`[dry-run] would ${existing ? 'refresh TTL on' : 'create'} ${branchName}`)
 		deps.log(`[dry-run] would ${envExists ? 'update' : 'create'} env vars on branch ${gitBranch}`)
+		if (config.unpooledEnvVarName) {
+			deps.log(`[dry-run] would write the unpooled URI into ${config.unpooledEnvVarName}`)
+		}
 		if (!envExists) deps.log('[dry-run] would request a redeploy')
 		return { branchId: existing?.id ?? '', branchCreated: false, envCreated: false, redeployed: false }
 	}
@@ -49,6 +56,10 @@ export async function ensure(deps: CommandDeps, params: EnsureParams): Promise<E
 
 	const uri = await deps.neon.connectionUri(branchId)
 	await deps.vercel.upsertEnv(config.envVarName, uri, gitBranch, true)
+	if (config.unpooledEnvVarName) {
+		const directUri = await deps.neon.connectionUri(branchId, false)
+		await deps.vercel.upsertEnv(config.unpooledEnvVarName, directUri, gitBranch, true)
+	}
 	await deps.vercel.upsertEnv(ISOLATED_FLAG_ENV, '1', gitBranch, false)
 	deps.log(`+ Vercel preview env set for git branch ${gitBranch}`)
 

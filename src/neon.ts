@@ -86,12 +86,16 @@ export class NeonClient {
 		})
 	}
 
-	async connectionUri(branchId: string): Promise<string> {
+	/**
+	 * `pooled: false` returns Neon's direct (unpooled) URI from the very same
+	 * endpoint — needed by libraries that cannot run through PgBouncer.
+	 */
+	async connectionUri(branchId: string, pooled = true): Promise<string> {
 		const params = new URLSearchParams({
 			branch_id: branchId,
 			database_name: this.config.databaseName,
 			role_name: this.config.roleName,
-			pooled: 'true',
+			pooled: String(pooled),
 		})
 		const result = await this.request<{ uri: string }>(
 			'GET',

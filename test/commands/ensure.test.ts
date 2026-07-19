@@ -23,7 +23,11 @@ function makeDeps() {
 		createBranch: vi.fn(),
 		setExpiry: vi.fn(),
 		waitReady: vi.fn(),
-		connectionUri: vi.fn().mockResolvedValue('postgres://preview'),
+		connectionUri: vi
+			.fn()
+			.mockImplementation((_id: string, pooled = true) =>
+				Promise.resolve(pooled ? 'postgres://preview' : 'postgres://preview-direct'),
+			),
 	}
 	const vercel = {
 		listBranchEnvs: vi.fn().mockResolvedValue([]),
@@ -145,5 +149,85 @@ describe('ensure', () => {
 		for (const call of (ctx.deps.log as ReturnType<typeof vi.fn>).mock.calls) {
 			expect(String(call[0])).not.toContain('postgres://preview')
 		}
+	})
+
+	describe('unpooledEnvVarName', () => {
+		const UNPOOLED_PARAMS = {
+			...PARAMS,
+			config: { ...CONFIG, unpooledEnvVarName: 'DB_URL_UNPOOLED' },
+		}
+
+		it('ha nincs megadva, csak a pooled URI-t kéri le', async () => {
+			ctx.neon.findBranchByName.mockResolvedValue({ id: 'br-old', name: 'x' })
+
+			await ensure(ctx.deps, PARAMS)
+
+			expect(ctx.neon.connectionUri).toHaveBeenCalledTimes(1)
+			expect(ctx.vercel.upsertEnv).toHaveBeenCalledTimes(2)
+			expect(ctx.vercel.upsertEnv).not.toHaveBeenCalledWith(
+				'DB_URL_UNPOOLED',
+				expect.anything(),
+				expect.anything(),
+				expect.anything(),
+			)
+		})
+
+		it('ha meg van adva, a direkt URI-t is kiírja ugyanarra a git branchre', async () => {
+			ctx.neon.findBranchByName.mockResolvedValue({ id: 'br-old', name: 'x' })
+
+			await ensure(ctx.deps, UNPOOLED_PARAMS)
+
+			expect(ctx.neon.connectionUri).toHaveBeenCalledWith('br-old', false)
+			expect(ctx.vercel.upsertEnv).toHaveBeenCalledWith('DB_URL', 'postgres://preview', 'feat/x', true)
+			expect(ctx.vercel.upsertEnv).toHaveBeenCalledWith(
+				'DB_URL_UNPOOLED',
+				'postgres://preview-direct',
+				'feat/x',
+				true,
+			)
+		})
+
+		it('redeployt kér, ha a pooled megvolt, de az unpooled még nem', async () => {
+			ctx.neon.findBranchByName.mockResolvedValue({ id: 'br-old', name: 'x' })
+			ctx.vercel.listBranchEnvs.mockResolvedValue([{ id: 'e1', key: 'DB_URL', gitBranch: 'feat/x' }])
+
+			const result = await ensure(ctx.deps, UNPOOLED_PARAMS)
+
+			expect(result.redeployed).toBe(true)
+		})
+
+		it('nem kér redeployt, ha mindkét env var megvolt', async () => {
+			ctx.neon.findBranchByName.mockResolvedValue({ id: 'br-old', name: 'x' })
+			ctx.vercel.listBranchEnvs.mockResolvedValue([
+				{ id: 'e1', key: 'DB_URL', gitBranch: 'feat/x' },
+				{ id: 'e2', key: 'DB_URL_UNPOOLED', gitBranch: 'feat/x' },
+			])
+
+			const result = await ensure(ctx.deps, UNPOOLED_PARAMS)
+
+			expect(ctx.vercel.redeploy).not.toHaveBeenCalled()
+			expect(result.redeployed).toBe(false)
+		})
+
+		it('dry-run módban naplózza az unpooled env vart is, de nem hív API-t', async () => {
+			ctx.neon.findBranchByName.mockResolvedValue({ id: 'br-old', name: 'x' })
+
+			await ensure(ctx.deps, { ...UNPOOLED_PARAMS, dryRun: true })
+
+			expect(ctx.neon.connectionUri).not.toHaveBeenCalled()
+			expect(ctx.vercel.upsertEnv).not.toHaveBeenCalled()
+			const logged = (ctx.deps.log as ReturnType<typeof vi.fn>).mock.calls.map((call) => String(call[0]))
+			expect(logged.some((line) => line.includes('DB_URL_UNPOOLED'))).toBe(true)
+		})
+
+		it('sosem logolja a direkt connection stringet', async () => {
+			ctx.neon.findBranchByName.mockResolvedValue({ id: 'br-old', name: 'x' })
+
+			await ensure(ctx.deps, UNPOOLED_PARAMS)
+
+			for (const call of (ctx.deps.log as ReturnType<typeof vi.fn>).mock.calls) {
+				expect(String(call[0])).not.toContain('postgres://preview-direct')
+			}
+		})
 	})
 })

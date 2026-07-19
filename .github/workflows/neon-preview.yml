@@ -47,6 +47,10 @@ on:
         description: "Vercel environment-variable key this workflow writes the forked branch's connection URI into (Preview scope, scoped to the PR's git branch). Must exactly match the key your application code reads for its database connection string (e.g. DATABASE_URL)."
         required: true
         type: string
+      unpooled-env-var-name:
+        description: "Optional second Vercel environment-variable key that receives the SAME forked branch's unpooled (direct) connection URI, alongside the pooled one in env-var-name. Set it only if your app needs a direct connection — some libraries and migration tools cannot run through the connection pooler. Leave unset to write the pooled URI only."
+        required: false
+        type: string
       ttl-days:
         description: "Days a preview branch may live without being refreshed before Neon auto-expires it. ensure sets expires_at this far out when creating/reusing a branch; the daily refresh-ttl cron extends it again for every still-open PR."
         required: true
@@ -108,6 +112,7 @@ jobs:
           BRANCH_PREFIX: ${{ inputs.branch-prefix }}
           SHARED_BRANCH_NAME: ${{ inputs.shared-branch-name }}
           ENV_VAR_NAME: ${{ inputs.env-var-name }}
+          UNPOOLED_ENV_VAR_NAME: ${{ inputs.unpooled-env-var-name }}
           TTL_DAYS: ${{ inputs.ttl-days }}
           PR_NUMBER: ${{ inputs.pr-number }}
           GIT_BRANCH: ${{ inputs.git-branch }}
@@ -137,6 +142,12 @@ jobs:
 
           if [[ -n "$GIT_BRANCH" ]]; then
             args+=(--git-branch="$GIT_BRANCH")
+          fi
+
+          # Opcionális input: ha nincs megadva, üres stringként renderelődik, és a
+          # flag el sem jut a CLI-hez — így a viselkedés változatlan marad.
+          if [[ -n "$UNPOOLED_ENV_VAR_NAME" ]]; then
+            args+=(--unpooled-env-var-name="$UNPOOLED_ENV_VAR_NAME")
           fi
 
           if [[ "$OPEN_PR_NUMBERS_KNOWN" == "true" ]]; then

@@ -18,6 +18,7 @@ export async function destroy(deps: CommandDeps, params: DestroyParams): Promise
 	const { config, prNumber, gitBranch, dryRun } = params
 	const branchName = branchNameForPr(config.branchPrefix, prNumber)
 	const ownedKeys = new Set([config.envVarName, ISOLATED_FLAG_ENV])
+	if (config.unpooledEnvVarName) ownedKeys.add(config.unpooledEnvVarName)
 
 	const branch = await deps.neon.findBranchByName(branchName)
 	const envs = (await deps.vercel.listBranchEnvs(gitBranch)).filter((env) => ownedKeys.has(env.key))

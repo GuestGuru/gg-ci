@@ -49,6 +49,19 @@ describe('parseArgs', () => {
 		expect(result.openPrNumbers).toBeUndefined()
 	})
 
+	it('az --unpooled-env-var-name opcionális, alapból undefined', () => {
+		const result = parseArgs(['ensure', ...BASE, '--pr-number=1', '--git-branch=x'], ENV)
+		expect(result.config.unpooledEnvVarName).toBeUndefined()
+	})
+
+	it('feldolgozza az --unpooled-env-var-name-et, ha meg van adva', () => {
+		const result = parseArgs(
+			['ensure', ...BASE, '--pr-number=1', '--git-branch=x', '--unpooled-env-var-name=DB_URL_UNPOOLED'],
+			ENV,
+		)
+		expect(result.config.unpooledEnvVarName).toBe('DB_URL_UNPOOLED')
+	})
+
 	it('hibázik ismeretlen parancsra', () => {
 		expect(() => parseArgs(['nope', ...BASE], ENV)).toThrow(/Unknown command/)
 	})

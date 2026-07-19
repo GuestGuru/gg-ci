@@ -80,6 +80,36 @@ describe('destroy', () => {
 		expect(result).toEqual({ branchDeleted: false, envsDeleted: 0 })
 	})
 
+	it('törli az unpooled env vart is, ha az konfigurálva van', async () => {
+		ctx.neon.findBranchByName.mockResolvedValue(null)
+		ctx.vercel.listBranchEnvs.mockResolvedValue([
+			{ id: 'e1', key: 'DB_URL', gitBranch: 'feat/x' },
+			{ id: 'e2', key: 'DB_URL_UNPOOLED', gitBranch: 'feat/x' },
+		])
+
+		const result = await destroy(ctx.deps, {
+			...PARAMS,
+			config: { ...CONFIG, unpooledEnvVarName: 'DB_URL_UNPOOLED' },
+		})
+
+		expect(ctx.vercel.deleteEnv).toHaveBeenCalledWith('e1')
+		expect(ctx.vercel.deleteEnv).toHaveBeenCalledWith('e2')
+		expect(result.envsDeleted).toBe(2)
+	})
+
+	it('unpooled config nélkül nem nyúl az unpooled kulcshoz', async () => {
+		ctx.neon.findBranchByName.mockResolvedValue(null)
+		ctx.vercel.listBranchEnvs.mockResolvedValue([
+			{ id: 'e1', key: 'DB_URL', gitBranch: 'feat/x' },
+			{ id: 'e2', key: 'DB_URL_UNPOOLED', gitBranch: 'feat/x' },
+		])
+
+		const result = await destroy(ctx.deps, PARAMS)
+
+		expect(ctx.vercel.deleteEnv).not.toHaveBeenCalledWith('e2')
+		expect(result.envsDeleted).toBe(1)
+	})
+
 	it('dry-run módban semmit nem töröl', async () => {
 		ctx.neon.findBranchByName.mockResolvedValue({ id: 'br-1', name: 'x' })
 		ctx.vercel.listBranchEnvs.mockResolvedValue([{ id: 'e1', key: 'DB_URL', gitBranch: 'feat/x' }])
