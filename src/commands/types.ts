@@ -1,10 +1,14 @@
 import type { NeonClient } from '../neon.js'
 import type { VercelClient } from '../vercel.js'
 
-export interface CommandDeps {
-	neon: NeonClient
+/** The alias commands touch Vercel only — they must not require a Neon client. */
+export interface VercelCommandDeps {
 	vercel: VercelClient
 	log: (message: string) => void
+}
+
+export interface CommandDeps extends VercelCommandDeps {
+	neon: NeonClient
 	now: () => Date
 }
 

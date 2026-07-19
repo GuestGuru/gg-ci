@@ -87,6 +87,84 @@ describe('VercelClient', () => {
 		expect(JSON.parse(init.body)).toEqual({ deploymentId: 'dpl_1', name: 'my-project' })
 	})
 
+	it('aliast rendel a deploymenthez', async () => {
+		fetchMock.mockResolvedValueOnce(jsonResponse({ uid: 'alias_1', alias: 'pr-12.preview.example.com' }))
+
+		const result = await client().assignAlias('dpl_1', 'pr-12.preview.example.com')
+
+		const [url, init] = mockCallArgs(fetchMock)
+		expect(url).toBe('https://api.vercel.com/v2/deployments/dpl_1/aliases?teamId=team_1')
+		expect(init.method).toBe('POST')
+		expect(JSON.parse(init.body)).toEqual({ alias: 'pr-12.preview.example.com' })
+		expect(result).toEqual({ alreadyAssigned: false })
+	})
+
+	it('a 409-et sikerként kezeli — az alias már erre a deploymentre mutat', async () => {
+		fetchMock.mockResolvedValueOnce(new Response('already assigned', { status: 409 }))
+		expect(await client().assignAlias('dpl_1', 'pr-12.preview.example.com')).toEqual({
+			alreadyAssigned: true,
+		})
+	})
+
+	it('név szerint találja meg a projekt aliasát', async () => {
+		fetchMock.mockResolvedValueOnce(
+			jsonResponse({
+				aliases: [
+					{ uid: 'a1', alias: 'other.preview.example.com', deploymentId: 'dpl_0' },
+					{ uid: 'a2', alias: 'pr-12.preview.example.com', deploymentId: 'dpl_1' },
+				],
+				pagination: { count: 2, next: null, prev: null },
+			}),
+		)
+
+		const alias = await client().findAlias('pr-12.preview.example.com')
+
+		expect(alias?.uid).toBe('a2')
+		const [url] = mockCallArgs(fetchMock)
+		expect(url).toContain('/v4/aliases?')
+		expect(url).toContain('projectId=prj_1')
+		expect(url).toContain('teamId=team_1')
+	})
+
+	it('lapozva gyűjti be az aliasokat', async () => {
+		fetchMock
+			.mockResolvedValueOnce(
+				jsonResponse({
+					aliases: [{ uid: 'a1', alias: 'one.preview.example.com' }],
+					pagination: { count: 1, next: 1700000000000, prev: null },
+				}),
+			)
+			.mockResolvedValueOnce(
+				jsonResponse({
+					aliases: [{ uid: 'a2', alias: 'two.preview.example.com' }],
+					pagination: { count: 1, next: null, prev: null },
+				}),
+			)
+
+		const aliases = await client().listAliases()
+
+		expect(aliases.map((a) => a.uid)).toEqual(['a1', 'a2'])
+		expect(mockCallArgs(fetchMock, 1)[0]).toContain('until=1700000000000')
+	})
+
+	it('null, ha nincs ilyen nevű alias', async () => {
+		fetchMock.mockResolvedValueOnce(jsonResponse({ aliases: [], pagination: { count: 0, next: null } }))
+		expect(await client().findAlias('pr-12.preview.example.com')).toBeNull()
+	})
+
+	it('a 404-es alias törlést nem tekinti hibának', async () => {
+		fetchMock.mockResolvedValueOnce(new Response('gone', { status: 404 }))
+		await expect(client().deleteAlias('a1')).resolves.toBeUndefined()
+	})
+
+	it('id alapján töröl aliast', async () => {
+		fetchMock.mockResolvedValueOnce(jsonResponse({ status: 'SUCCESS' }))
+		await client().deleteAlias('a1')
+		const [url, init] = mockCallArgs(fetchMock)
+		expect(url).toBe('https://api.vercel.com/v2/aliases/a1?teamId=team_1')
+		expect(init.method).toBe('DELETE')
+	})
+
 	it('hibát dob nem-ok válaszra', async () => {
 		fetchMock.mockResolvedValueOnce(new Response('boom', { status: 500 }))
 		await expect(client().listBranchEnvs('feat/x')).rejects.toThrow(/500/)

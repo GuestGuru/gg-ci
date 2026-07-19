@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseArgs } from '../src/config.js'
+import { parseAliasArgs, parseArgs } from '../src/config.js'
 
 const BASE = [
 	'--neon-project-id=proj_1',
@@ -67,5 +67,63 @@ describe('parseArgs', () => {
 
 	it('hibázik, ha az ensure-höz nincs pr-number', () => {
 		expect(() => parseArgs(['ensure', ...BASE, '--git-branch=x'], ENV)).toThrow(/pr-number/)
+	})
+})
+
+const ALIAS_BASE = ['--vercel-project-id=prj_1', '--vercel-team-id=team_1']
+
+describe('parseAliasArgs', () => {
+	it('feldolgozza az alias-set parancsot', () => {
+		const result = parseAliasArgs(
+			['alias-set', ...ALIAS_BASE, '--deployment-id=dpl_1', '--alias-host=pr-12.preview.example.com'],
+			ENV,
+		)
+		expect(result.command).toBe('alias-set')
+		expect(result.deploymentId).toBe('dpl_1')
+		expect(result.aliasHost).toBe('pr-12.preview.example.com')
+		expect(result.dryRun).toBe(false)
+		expect(result.config).toEqual({
+			vercelToken: 'vercel-token',
+			vercelProjectId: 'prj_1',
+			vercelTeamId: 'team_1',
+		})
+	})
+
+	it('az alias-remove-hoz nem kell deployment-id', () => {
+		const result = parseAliasArgs(
+			['alias-remove', ...ALIAS_BASE, '--alias-host=pr-12.preview.example.com', '--dry-run'],
+			ENV,
+		)
+		expect(result.deploymentId).toBeUndefined()
+		expect(result.dryRun).toBe(true)
+	})
+
+	it('nem kér Neon inputot és NEON_API_KEY-t', () => {
+		const result = parseAliasArgs(
+			['alias-remove', ...ALIAS_BASE, '--alias-host=pr-12.preview.example.com'],
+			{ VERCEL_TOKEN: 'vercel-token' } as NodeJS.ProcessEnv,
+		)
+		expect(result.aliasHost).toBe('pr-12.preview.example.com')
+	})
+
+	it('hibázik, ha az alias-sethez nincs deployment-id', () => {
+		expect(() =>
+			parseAliasArgs(['alias-set', ...ALIAS_BASE, '--alias-host=pr-12.preview.example.com'], ENV),
+		).toThrow(/deployment-id/)
+	})
+
+	it('hibázik, ha az alias-host URL és nem hosztnév', () => {
+		expect(() =>
+			parseAliasArgs(
+				['alias-remove', ...ALIAS_BASE, '--alias-host=https://pr-12.preview.example.com'],
+				ENV,
+			),
+		).toThrow(/Invalid --alias-host/)
+	})
+
+	it('hibázik hiányzó VERCEL_TOKEN-re', () => {
+		expect(() =>
+			parseAliasArgs(['alias-remove', ...ALIAS_BASE, '--alias-host=pr-12.preview.example.com'], {}),
+		).toThrow(/VERCEL_TOKEN/)
 	})
 })

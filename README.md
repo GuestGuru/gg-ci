@@ -256,3 +256,122 @@ alongside the pooled one. Not implemented — add it when the first such app onb
 - GitHub disables scheduled workflows after 60 days of repository inactivity.
 - `refresh-ttl` **skips cleanup entirely** when `open-pr-numbers-known` is `false`. A
   failed `gh pr list` must never be read as "no PRs are open".
+
+## Preview domain aliases
+
+Points each pull request's Vercel preview deployment at a hostname under your own
+domain (`myapp-pr-12.preview.example.com`) instead of leaving it on the generated
+`*.vercel.app` URL.
+
+Needed because a **session cookie scoped to a domain** (`Domain=.example.com`, set by a
+central auth service at `auth.example.com`) is simply not sent to `*.vercel.app` — a
+different registrable domain. On the generated preview URL the app therefore looks
+permanently logged out, and no amount of app-side configuration fixes it. Moving the
+preview onto a subdomain of the cookie's domain makes the existing session reach it.
+
+Prerequisite: the wildcard domain (`*.preview.example.com`) must already be added to the
+Vercel project, with DNS pointing at Vercel. This workflow only assigns aliases; it never
+creates or verifies domains.
+
+### Commands
+
+| Command | When | What it does |
+|---|---|---|
+| `alias-set` | `deployment_status` = success | Points `alias-host` at the given deployment |
+| `alias-remove` | PR closed / merged | Detaches `alias-host` |
+
+Both are idempotent and support `dry-run`. `alias-set` re-run against a newer deployment
+moves the alias over — that is the normal path on every push. `alias-remove` on an alias
+that does not exist succeeds.
+
+The workflow deliberately **does not comment on the pull request**. gg-ci stays
+independent of GitHub's PR model (the same reasoning behind `open-pr-numbers`); the
+caller gets the finished URL as the `preview-url` output and decides what to do with it.
+
+#### Inputs
+
+| Input | Type | Required | Meaning |
+|---|---|---|---|
+| `command` | string | yes | `set` \| `remove` |
+| `alias-host` | string | yes | Full hostname to assign, e.g. `myapp-pr-12.preview.example.com`. A bare hostname — passing a URL is rejected. |
+| `deployment-id` | string | only for `set` | The Vercel deployment ID to alias. |
+| `vercel-project-id` | string | yes | Vercel project ID that owns the deployment and the alias. |
+| `vercel-team-id` | string | yes | Vercel team (organization) ID that owns the project above. |
+| `dry-run` | boolean | no (default `false`) | Logs the action without calling the Vercel write APIs. |
+
+#### Outputs
+
+| Output | Meaning |
+|---|---|
+| `preview-url` | `https://<alias-host>`, set by `set`. |
+
+#### Caller example
+
+`deployment_status` fires once Vercel reports the preview as ready — aliasing earlier
+fails, since a deployment that is not `READY` cannot be aliased.
+
+```yaml
+on:
+  deployment_status:
+  pull_request:
+    types: [closed]
+
+jobs:
+  find-pr:
+    if: github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      number: ${{ steps.pr.outputs.number }}
+    steps:
+      - id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF: ${{ github.event.deployment.ref }}
+        run: |
+          number=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$REF" --state open \
+            --json number --jq '.[0].number // ""')
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+  alias:
+    needs: find-pr
+    if: needs.find-pr.outputs.number != ''
+    uses: GuestGuru/gg-ci/.github/workflows/preview-alias.yml@main
+    with:
+      command: set
+      deployment-id: ${{ github.event.deployment.payload.deploymentId }}
+      alias-host: myapp-pr-${{ needs.find-pr.outputs.number }}.preview.example.com
+      vercel-project-id: your-vercel-project-id
+      vercel-team-id: your-vercel-team-id
+    secrets:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+  unalias:
+    if: github.event_name == 'pull_request'
+    uses: GuestGuru/gg-ci/.github/workflows/preview-alias.yml@main
+    with:
+      command: remove
+      alias-host: myapp-pr-${{ github.event.pull_request.number }}.preview.example.com
+      vercel-project-id: your-vercel-project-id
+      vercel-team-id: your-vercel-team-id
+    secrets:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+```
+
+To comment the URL on the PR, add a job that consumes `needs.alias.outputs.preview-url`
+in your own repository — that keeps the GitHub-specific part on your side.
+
+#### Vercel alias API notes
+
+- `POST /v2/deployments/{id}/aliases` answers **409** when the alias already points at
+  *that same* deployment. It is the success case for a re-run, not a failure, so the CLI
+  treats it as such. An alias held by a *different* deployment is moved over with a 200 —
+  no delete-then-create dance is needed.
+- Aliases are resolved by name through `GET /v4/aliases?projectId=…`, not
+  `GET /v9/projects/{id}/domains`: only the alias list returns the alias `uid` that
+  `DELETE /v2/aliases/{id}` needs. The list is paginated (`pagination.next` is a timestamp
+  fed back as `until`), and a busy project accumulates one alias per deployment, so the
+  client follows the cursor instead of reading only the first page.
+- `DELETE /v2/aliases/{id}` returns 404 for an unknown alias, which the CLI treats as the
+  desired end state.

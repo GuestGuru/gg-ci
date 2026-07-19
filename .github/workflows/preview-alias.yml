@@ -1,0 +1,104 @@
+# Reusable workflow: point a preview domain at a PR's Vercel preview deployment.
+#
+# Every app-specific value is a required input — this repository is PUBLIC and must
+# never contain GuestGuru infrastructure identifiers. Do NOT add default values.
+#
+# This workflow deliberately does NOT comment on the pull request: gg-ci stays
+# independent of GitHub's PR model (same reasoning as `open-pr-numbers`). Post the
+# `preview-url` output from the caller workflow if you want a PR comment.
+name: Preview domain alias
+
+on:
+  workflow_call:
+    inputs:
+      command:
+        description: "set | remove"
+        required: true
+        type: string
+      alias-host:
+        description: "Full hostname to point at the deployment, e.g. myapp-pr-12.preview.example.com. Bare hostname, not a URL. The domain must already be added to the Vercel project."
+        required: true
+        type: string
+      deployment-id:
+        description: "Required for `set` — the Vercel deployment ID to alias (e.g. the deployment_status event's deployment.id)."
+        required: false
+        type: string
+      vercel-project-id:
+        description: "Vercel project ID that owns the deployment and the alias (Vercel project → Settings → General, or `vercel project ls`)."
+        required: true
+        type: string
+      vercel-team-id:
+        description: "Vercel team (organization) ID that owns the project above — required by the Vercel API alongside the project ID (team → Settings → General, or `vercel teams ls`)."
+        required: true
+        type: string
+      dry-run:
+        description: "Logs the action that would be taken without calling the Vercel write APIs."
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      VERCEL_TOKEN: { required: true }
+    outputs:
+      preview-url:
+        description: "https://<alias-host>, set by the `set` command."
+        value: ${{ jobs.run.outputs.preview-url }}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    outputs:
+      preview-url: ${{ steps.alias.outputs.preview-url }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          repository: GuestGuru/gg-ci
+          ref: main
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run alias-${{ inputs.command }}
+        id: alias
+        shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          COMMAND: ${{ inputs.command }}
+          ALIAS_HOST: ${{ inputs.alias-host }}
+          DEPLOYMENT_ID: ${{ inputs.deployment-id }}
+          VERCEL_PROJECT_ID: ${{ inputs.vercel-project-id }}
+          VERCEL_TEAM_ID: ${{ inputs.vercel-team-id }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          set -o pipefail
+
+          case "$COMMAND" in
+            set|remove) ;;
+            *) echo "Unknown command: $COMMAND (expected 'set' or 'remove')" >&2; exit 1 ;;
+          esac
+
+          args=(
+            --alias-host="$ALIAS_HOST"
+            --vercel-project-id="$VERCEL_PROJECT_ID"
+            --vercel-team-id="$VERCEL_TEAM_ID"
+          )
+
+          if [[ -n "$DEPLOYMENT_ID" ]]; then
+            args+=(--deployment-id="$DEPLOYMENT_ID")
+          fi
+
+          if [[ "$DRY_RUN" == "true" ]]; then
+            args+=(--dry-run)
+          fi
+
+          npm run gg-ci -- "alias-$COMMAND" "${args[@]}" | tee cli-output.log
+
+          # The CLI prints `preview-url=<url>` on its own line; npm's banner lines
+          # are filtered out by anchoring the match at the start of the line.
+          url="$(grep -m1 '^preview-url=' cli-output.log | cut -d= -f2-)"
+          if [[ -n "$url" ]]; then
+            echo "preview-url=$url" >> "$GITHUB_OUTPUT"
+          fi

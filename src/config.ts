@@ -1,6 +1,18 @@
+import type { VercelConfig } from './vercel.js'
+
+/** Commands that manage a Neon preview branch — they need the full Neon config. */
 export type Command = 'ensure' | 'destroy' | 'refresh-ttl' | 'reset-shared'
 
+/** Commands that only talk to Vercel — requiring Neon inputs for them would be noise. */
+export type AliasCommand = 'alias-set' | 'alias-remove'
+
 const COMMANDS: Command[] = ['ensure', 'destroy', 'refresh-ttl', 'reset-shared']
+
+const ALIAS_COMMANDS: AliasCommand[] = ['alias-set', 'alias-remove']
+
+export function isAliasCommand(value: string): value is AliasCommand {
+	return (ALIAS_COMMANDS as string[]).includes(value)
+}
 
 export interface Config {
 	neonApiKey: string
@@ -15,6 +27,15 @@ export interface Config {
 	sharedBranchName: string
 	envVarName: string
 	ttlDays: number
+}
+
+export interface ParsedAliasArgs {
+	command: AliasCommand
+	config: VercelConfig
+	/** Required for `alias-set` only — `alias-remove` resolves the alias by host. */
+	deploymentId?: string
+	aliasHost: string
+	dryRun: boolean
 }
 
 export interface ParsedArgs {
@@ -64,7 +85,8 @@ function parsePrNumbers(raw: string): number[] {
 export function parseArgs(argv: string[], env: NodeJS.ProcessEnv): ParsedArgs {
 	const command = argv[0] as Command
 	if (!COMMANDS.includes(command)) {
-		throw new Error(`Unknown command: ${argv[0] ?? '(none)'}. Expected one of ${COMMANDS.join(', ')}`)
+		const known = [...COMMANDS, ...ALIAS_COMMANDS].join(', ')
+		throw new Error(`Unknown command: ${argv[0] ?? '(none)'}. Expected one of ${known}`)
 	}
 
 	const flags = toFlagMap(argv.slice(1))
@@ -114,6 +136,50 @@ export function parseArgs(argv: string[], env: NodeJS.ProcessEnv): ParsedArgs {
 	if (command === 'refresh-ttl') {
 		const raw = flags.get('open-pr-numbers')
 		parsed.openPrNumbers = raw === undefined ? undefined : parsePrNumbers(raw)
+	}
+
+	return parsed
+}
+
+/**
+ * The Vercel API wants a bare hostname. Passing a URL (or a host with a path)
+ * would otherwise be accepted here and fail much later with an opaque 400.
+ */
+function assertHostname(value: string): string {
+	if (value.includes('://') || value.includes('/')) {
+		throw new Error(`Invalid --alias-host: ${value} — expected a bare hostname, not a URL`)
+	}
+	return value
+}
+
+/**
+ * Separate entry point from `parseArgs`: the alias commands need neither the
+ * Neon inputs nor NEON_API_KEY, and demanding them would force every caller to
+ * pass irrelevant identifiers.
+ */
+export function parseAliasArgs(argv: string[], env: NodeJS.ProcessEnv): ParsedAliasArgs {
+	const command = argv[0] ?? ''
+	if (!isAliasCommand(command)) {
+		throw new Error(`Unknown command: ${argv[0] ?? '(none)'}. Expected one of ${ALIAS_COMMANDS.join(', ')}`)
+	}
+
+	const flags = toFlagMap(argv.slice(1))
+
+	const config: VercelConfig = {
+		vercelToken: requiredEnv(env, 'VERCEL_TOKEN'),
+		vercelProjectId: required(flags, 'vercel-project-id'),
+		vercelTeamId: required(flags, 'vercel-team-id'),
+	}
+
+	const parsed: ParsedAliasArgs = {
+		command,
+		config,
+		aliasHost: assertHostname(required(flags, 'alias-host')),
+		dryRun: flags.has('dry-run'),
+	}
+
+	if (command === 'alias-set') {
+		parsed.deploymentId = required(flags, 'deployment-id')
 	}
 
 	return parsed

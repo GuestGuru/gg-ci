@@ -13,6 +13,15 @@ export interface VercelConfig {
 	vercelTeamId: string
 }
 
+export interface VercelAlias {
+	uid: string
+	alias: string
+	deploymentId?: string | null
+}
+
+/** Safety net for the alias pagination loop — one page is 100 aliases. */
+const MAX_ALIAS_PAGES = 20
+
 export class VercelClient {
 	constructor(
 		private readonly config: VercelConfig,
@@ -104,5 +113,62 @@ export class VercelClient {
 			deploymentId,
 			name,
 		})
+	}
+
+	/**
+	 * Points `alias` at `deploymentId`. Idempotent by way of the API itself:
+	 *
+	 * - an alias currently held by *another* deployment is moved over (200), so
+	 *   re-running on a new deployment of the same PR is the normal path;
+	 * - an alias already held by *this* deployment answers 409, which is a
+	 *   success for our purposes, not a failure.
+	 *
+	 * Returns whether the 409 (already-assigned) branch was taken.
+	 */
+	async assignAlias(deploymentId: string, alias: string): Promise<{ alreadyAssigned: boolean }> {
+		const result = await this.request<{ uid: string; alias: string }>(
+			'POST',
+			`/v2/deployments/${deploymentId}/aliases?${this.team}`,
+			{ alias },
+			[409],
+		)
+		return { alreadyAssigned: result === undefined }
+	}
+
+	/** Every alias of this project, following the timestamp-cursor pagination. */
+	async listAliases(): Promise<VercelAlias[]> {
+		const aliases: VercelAlias[] = []
+		let until: number | undefined
+
+		for (let page = 0; page < MAX_ALIAS_PAGES; page += 1) {
+			const params = new URLSearchParams({
+				projectId: this.config.vercelProjectId,
+				limit: '100',
+				teamId: this.config.vercelTeamId,
+			})
+			if (until !== undefined) params.set('until', String(until))
+
+			const result = await this.request<{
+				aliases: VercelAlias[]
+				pagination?: { next: number | null }
+			}>('GET', `/v4/aliases?${params}`)
+
+			aliases.push(...(result?.aliases ?? []))
+			const next = result?.pagination?.next
+			if (next === undefined || next === null) break
+			until = next
+		}
+
+		return aliases
+	}
+
+	async findAlias(host: string): Promise<VercelAlias | null> {
+		const aliases = await this.listAliases()
+		return aliases.find((alias) => alias.alias === host) ?? null
+	}
+
+	/** 404 is not an error: the alias is already gone, which is the desired end state. */
+	async deleteAlias(aliasId: string): Promise<void> {
+		await this.request('DELETE', `/v2/aliases/${aliasId}?${this.team}`, undefined, [404])
 	}
 }
