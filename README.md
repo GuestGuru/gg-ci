@@ -269,9 +269,15 @@ different registrable domain. On the generated preview URL the app therefore loo
 permanently logged out, and no amount of app-side configuration fixes it. Moving the
 preview onto a subdomain of the cookie's domain makes the existing session reach it.
 
-Prerequisite: the wildcard domain (`*.preview.example.com`) must already be added to the
-Vercel project, with DNS pointing at Vercel. This workflow only assigns aliases; it never
-creates or verifies domains.
+`alias-set` attaches the hostname to the Vercel project itself before aliasing it — a
+per-PR host (`myapp-pr-12.preview.example.com`) does not exist until the PR does, so it
+cannot be added by hand in advance.
+
+Prerequisite: the **apex domain** (`example.com`) must be owned by the Vercel **team**
+that owns the project, with DNS pointing at Vercel. Sub-domains of a team-owned apex come
+back `verified: true` immediately, with no TXT challenge. If the apex sits in a personal
+account instead, every added host stays unverified and will not serve traffic — move the
+domain to the team first.
 
 ### Commands
 
@@ -364,6 +370,21 @@ in your own repository — that keeps the GitHub-specific part on your side.
 
 #### Vercel alias API notes
 
+- **`cert_missing` is transient, and the name is misleading.** On a brand-new hostname the
+  measured sequence is: `POST /v10/projects/{id}/domains` returns `verified: true`
+  immediately → `POST /v2/deployments/{id}/aliases` fails with
+  `{"error":{"code":"cert_missing"}}` → ~12 seconds later the host answers 200 over HTTPS
+  → the identical alias call succeeds. It does not mean "this will never work"; it means
+  "the TLS certificate is still being issued". `alias-set` therefore retries **only** this
+  code, every 5 s up to 15 attempts (~70 s), and fails immediately on every other code.
+  Without the retry the *first* alias of every pull request would fail — the one case that
+  always happens.
+- **Adding the domain is idempotent, but the status code cannot be what decides that.**
+  A domain already on *this* project fails with **400**, whereas **409** means it belongs
+  to *another* Vercel project. Accepting 409 as "already there" would silently alias into
+  a domain someone else owns. `addProjectDomain` therefore resolves a failed add by asking
+  `GET /v9/projects/{id}/domains/{host}` whether the domain is on this project: if yes the
+  add was a no-op, if no the original error is rethrown.
 - `POST /v2/deployments/{id}/aliases` answers **409** when the alias already points at
   *that same* deployment. It is the success case for a re-run, not a failure, so the CLI
   treats it as such. An alias held by a *different* deployment is moved over with a 200 —

@@ -87,6 +87,57 @@ describe('VercelClient', () => {
 		expect(JSON.parse(init.body)).toEqual({ deploymentId: 'dpl_1', name: 'my-project' })
 	})
 
+	it('hozzáadja a domaint a projekthez', async () => {
+		fetchMock.mockResolvedValueOnce(
+			jsonResponse({ name: 'pr-12.preview.example.com', apexName: 'example.com', verified: true }),
+		)
+
+		const result = await client().addProjectDomain('pr-12.preview.example.com')
+
+		const [url, init] = mockCallArgs(fetchMock)
+		expect(url).toBe('https://api.vercel.com/v10/projects/prj_1/domains?teamId=team_1')
+		expect(init.method).toBe('POST')
+		expect(JSON.parse(init.body)).toEqual({ name: 'pr-12.preview.example.com' })
+		expect(result).toEqual({ alreadyPresent: false, verified: true })
+	})
+
+	it('idempotens: a projekten már meglévő domain (400) nem hiba', async () => {
+		fetchMock
+			.mockResolvedValueOnce(
+				jsonResponse({ error: { code: 'domain_already_in_use' } }, 400),
+			)
+			// A megerősítő lekérdezés: a domain tényleg EZEN a projekten van.
+			.mockResolvedValueOnce(jsonResponse({ name: 'pr-12.preview.example.com', verified: true }))
+
+		expect(await client().addProjectDomain('pr-12.preview.example.com')).toEqual({
+			alreadyPresent: true,
+			verified: true,
+		})
+	})
+
+	it('dob, ha a domain MÁS projekthez tartozik (409) — ezt nem szabad elnyelni', async () => {
+		fetchMock
+			.mockResolvedValueOnce(jsonResponse({ error: { code: 'domain_already_in_use' } }, 409))
+			// A megerősítő lekérdezés 404: a domain nincs a mi projektünkön.
+			.mockResolvedValueOnce(new Response('not found', { status: 404 }))
+
+		await expect(client().addProjectDomain('pr-12.preview.example.com')).rejects.toThrow(/409/)
+	})
+
+	it('null, ha a domain nincs a projekten', async () => {
+		fetchMock.mockResolvedValueOnce(new Response('not found', { status: 404 }))
+		expect(await client().findProjectDomain('pr-12.preview.example.com')).toBeNull()
+	})
+
+	it('a hibakódot kiolvassa a válasz törzséből', async () => {
+		fetchMock.mockResolvedValueOnce(jsonResponse({ error: { code: 'cert_missing' } }, 400))
+
+		await expect(client().assignAlias('dpl_1', 'pr-12.preview.example.com')).rejects.toMatchObject({
+			status: 400,
+			code: 'cert_missing',
+		})
+	})
+
 	it('aliast rendel a deploymenthez', async () => {
 		fetchMock.mockResolvedValueOnce(jsonResponse({ uid: 'alias_1', alias: 'pr-12.preview.example.com' }))
 

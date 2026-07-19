@@ -1,13 +1,21 @@
 import type { NeonClient } from '../neon.js'
 import type { VercelClient } from '../vercel.js'
 
-/** The alias commands touch Vercel only — they must not require a Neon client. */
-export interface VercelCommandDeps {
+interface BaseCommandDeps {
 	vercel: VercelClient
 	log: (message: string) => void
 }
 
-export interface CommandDeps extends VercelCommandDeps {
+/**
+ * The alias commands touch Vercel only — they must not require a Neon client.
+ * `sleep` is injected for the same reason `now` is: waiting out certificate
+ * provisioning must not make the test suite actually sleep.
+ */
+export interface VercelCommandDeps extends BaseCommandDeps {
+	sleep: (ms: number) => Promise<void>
+}
+
+export interface CommandDeps extends BaseCommandDeps {
 	neon: NeonClient
 	now: () => Date
 }

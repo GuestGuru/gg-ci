@@ -16,7 +16,7 @@ on:
         required: true
         type: string
       alias-host:
-        description: "Full hostname to point at the deployment, e.g. myapp-pr-12.preview.example.com. Bare hostname, not a URL. The domain must already be added to the Vercel project."
+        description: "Full hostname to point at the deployment, e.g. myapp-pr-12.preview.example.com. Bare hostname, not a URL. `set` attaches it to the project itself; the apex domain must be owned by the Vercel team."
         required: true
         type: string
       deployment-id:

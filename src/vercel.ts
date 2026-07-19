@@ -19,8 +19,39 @@ export interface VercelAlias {
 	deploymentId?: string | null
 }
 
+export interface VercelProjectDomain {
+	name: string
+	/** `false` means a DNS challenge is outstanding — the domain cannot serve an alias yet. */
+	verified: boolean
+}
+
 /** Safety net for the alias pagination loop — one page is 100 aliases. */
 const MAX_ALIAS_PAGES = 20
+
+/**
+ * Carries the Vercel error `code` alongside the status, because several
+ * outcomes are only distinguishable by code — most importantly `cert_missing`,
+ * a *transient* 400 that must be retried rather than treated as a failure.
+ */
+export class VercelApiError extends Error {
+	constructor(
+		message: string,
+		readonly status: number,
+		readonly code?: string,
+	) {
+		super(message)
+		this.name = 'VercelApiError'
+	}
+}
+
+function errorCodeFrom(body: string): string | undefined {
+	try {
+		const parsed = JSON.parse(body) as { error?: { code?: string } }
+		return parsed.error?.code
+	} catch {
+		return undefined
+	}
+}
 
 export class VercelClient {
 	constructor(
@@ -44,7 +75,12 @@ export class VercelClient {
 		})
 		if (okStatuses.includes(res.status)) return undefined
 		if (!res.ok) {
-			throw new Error(`Vercel API ${method} ${route.split('?')[0]} → ${res.status}: ${await res.text()}`)
+			const body = await res.text()
+			throw new VercelApiError(
+				`Vercel API ${method} ${route.split('?')[0]} → ${res.status}: ${body}`,
+				res.status,
+				errorCodeFrom(body),
+			)
 		}
 		const text = await res.text()
 		return (text ? JSON.parse(text) : {}) as T
@@ -113,6 +149,44 @@ export class VercelClient {
 			deploymentId,
 			name,
 		})
+	}
+
+	/** The domain as configured on *this* project, or null if it is not attached to it. */
+	async findProjectDomain(host: string): Promise<VercelProjectDomain | null> {
+		const result = await this.request<VercelProjectDomain>(
+			'GET',
+			`/v9/projects/${this.config.vercelProjectId}/domains/${host}?${this.team}`,
+			undefined,
+			[404],
+		)
+		return result ?? null
+	}
+
+	/**
+	 * Attaches `host` to the project, which must happen before it can be aliased —
+	 * a per-PR hostname cannot be added by hand ahead of time.
+	 *
+	 * Idempotency cannot be keyed on the status code here, and getting that wrong
+	 * would be dangerous: a domain already on *this* project fails with **400**,
+	 * while **409** means it is held by *another* Vercel project. Swallowing 409
+	 * would silently alias into someone else's domain. So a failed add is resolved
+	 * by asking whether the domain is on this project after all — if it is, the add
+	 * was a no-op; if it is not, the original error stands.
+	 */
+	async addProjectDomain(host: string): Promise<{ alreadyPresent: boolean; verified: boolean }> {
+		try {
+			const result = await this.request<VercelProjectDomain>(
+				'POST',
+				`/v10/projects/${this.config.vercelProjectId}/domains?${this.team}`,
+				{ name: host },
+			)
+			return { alreadyPresent: false, verified: result?.verified ?? false }
+		} catch (error) {
+			if (!(error instanceof VercelApiError)) throw error
+			const existing = await this.findProjectDomain(host)
+			if (!existing) throw error
+			return { alreadyPresent: true, verified: existing.verified }
+		}
 	}
 
 	/**

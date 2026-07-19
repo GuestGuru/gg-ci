@@ -19,6 +19,7 @@ async function runAlias(argv: string[]): Promise<void> {
 	const deps: VercelCommandDeps = {
 		vercel: new VercelClient(config),
 		log: (message) => console.log(message),
+		sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 	}
 
 	if (command === 'alias-set') {

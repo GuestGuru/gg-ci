@@ -5,7 +5,7 @@ function makeDeps() {
 	const vercel = { findAlias: vi.fn().mockResolvedValue(null), deleteAlias: vi.fn() }
 	return {
 		vercel,
-		deps: { vercel: vercel as never, log: vi.fn() },
+		deps: { vercel: vercel as never, log: vi.fn(), sleep: vi.fn(async () => {}) },
 	}
 }
 
