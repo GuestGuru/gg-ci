@@ -32,7 +32,9 @@ async function runAlias(argv: string[]): Promise<void> {
 	}
 
 	const result = await aliasRemove(deps, { aliasHost, dryRun })
-	console.log(`✓ alias-remove done (removed=${result.removed})`)
+	console.log(
+		`✓ alias-remove done (alias removed=${result.aliasRemoved}, domain removed=${result.domainRemoved})`,
+	)
 }
 
 async function main(): Promise<void> {

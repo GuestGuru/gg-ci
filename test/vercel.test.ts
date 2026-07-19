@@ -124,6 +124,21 @@ describe('VercelClient', () => {
 		await expect(client().addProjectDomain('pr-12.preview.example.com')).rejects.toThrow(/409/)
 	})
 
+	it('leválasztja a domaint a projektről', async () => {
+		fetchMock.mockResolvedValueOnce(jsonResponse({}))
+		await client().deleteProjectDomain('pr-12.preview.example.com')
+		const [url, init] = mockCallArgs(fetchMock)
+		expect(url).toBe(
+			'https://api.vercel.com/v9/projects/prj_1/domains/pr-12.preview.example.com?teamId=team_1',
+		)
+		expect(init.method).toBe('DELETE')
+	})
+
+	it('a 404-es domain törlést nem tekinti hibának', async () => {
+		fetchMock.mockResolvedValueOnce(new Response('not found', { status: 404 }))
+		await expect(client().deleteProjectDomain('pr-12.preview.example.com')).resolves.toBeUndefined()
+	})
+
 	it('null, ha a domain nincs a projekten', async () => {
 		fetchMock.mockResolvedValueOnce(new Response('not found', { status: 404 }))
 		expect(await client().findProjectDomain('pr-12.preview.example.com')).toBeNull()

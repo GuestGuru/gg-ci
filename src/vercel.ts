@@ -190,6 +190,19 @@ export class VercelClient {
 	}
 
 	/**
+	 * Detaches `host` from the project. 404 is not an error: the domain is already
+	 * gone, which is the desired end state.
+	 */
+	async deleteProjectDomain(host: string): Promise<void> {
+		await this.request(
+			'DELETE',
+			`/v9/projects/${this.config.vercelProjectId}/domains/${host}?${this.team}`,
+			undefined,
+			[404],
+		)
+	}
+
+	/**
 	 * Points `alias` at `deploymentId`. Idempotent by way of the API itself:
 	 *
 	 * - an alias currently held by *another* deployment is moved over (200), so

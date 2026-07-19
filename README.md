@@ -284,11 +284,11 @@ domain to the team first.
 | Command | When | What it does |
 |---|---|---|
 | `alias-set` | `deployment_status` = success | Points `alias-host` at the given deployment |
-| `alias-remove` | PR closed / merged | Detaches `alias-host` |
+| `alias-remove` | PR closed / merged | Removes the alias **and** detaches `alias-host` from the project |
 
 Both are idempotent and support `dry-run`. `alias-set` re-run against a newer deployment
-moves the alias over — that is the normal path on every push. `alias-remove` on an alias
-that does not exist succeeds.
+moves the alias over — that is the normal path on every push. `alias-remove` succeeds when
+the alias, the domain, or both are already gone.
 
 The workflow deliberately **does not comment on the pull request**. gg-ci stays
 independent of GitHub's PR model (the same reasoning behind `open-pr-numbers`); the
@@ -370,6 +370,14 @@ in your own repository — that keeps the GitHub-specific part on your side.
 
 #### Vercel alias API notes
 
+- **An attached domain falls back to production on its own, so cleanup must remove the
+  domain too.** A domain attached to a project with no git-branch binding is served by the
+  latest **production** deployment whenever nothing else claims it. Deleting only the alias
+  is therefore temporary: Vercel re-creates it against production within moments, and the
+  closed PR's link answers **200 with the live site**. That is worse than a 404 — the link
+  looks like it still shows the PR, silently and with no error. `alias-remove` deletes the
+  alias **and then** `DELETE /v9/projects/{id}/domains/{host}`; doing it in the other order
+  leaves a window for the alias to come back. Observed on a real PR close, 2026-07-19.
 - **`cert_missing` is transient, and the name is misleading.** On a brand-new hostname the
   measured sequence is: `POST /v10/projects/{id}/domains` returns `verified: true`
   immediately → `POST /v2/deployments/{id}/aliases` fails with
