@@ -128,7 +128,10 @@ jobs:
             --ttl-days="$TTL_DAYS"
           )
 
-          if [[ -n "$PR_NUMBER" ]]; then
+          # A `!= "0"` is kell: GitHub Actions egy be nem állított `number` típusú
+          # inputot "0"-ként renderel, nem üres stringként, így a `-n` teszt önmagában
+          # átengedné. PR-szám sosem 0, tehát ez biztonságos szűrő.
+          if [[ -n "$PR_NUMBER" && "$PR_NUMBER" != "0" ]]; then
             args+=(--pr-number="$PR_NUMBER")
           fi
 
