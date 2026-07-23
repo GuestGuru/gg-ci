@@ -214,4 +214,3 @@ Expected:
 - [ ] **Step 3: Confirm no SQL failure masking**
 
 Run the unit deadline case and inspect that the final error remains non-zero. Do not introduce a deliberately broken migration into a shared or production branch.
-
