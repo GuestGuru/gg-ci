@@ -27,6 +27,17 @@ fails, leaving a required check pending instead of reporting a useful failure.
 Every direct dependency must finish with `success`; `failure`, `cancelled`, `skipped`,
 missing results, malformed JSON, and an empty dependency set all fail closed.
 
+`.github/workflows/policy-gate.yml` is the matching organization-required workflow.
+Because GitHub loads it from this repository rather than from the target pull request,
+the pull request cannot replace the policy that checks it. The workflow runs
+`src/workflow-policy.ts`, which verifies the exact canonical workflow path, mandatory
+job IDs, `always()` condition, reusable-workflow reference, and `needs-json` input for
+each protected repository.
+
+Rollout order matters: merge `gg-ci`, switch every caller from its temporary test ref
+to `@main`, verify all checks, and only then enable the organization ruleset workflow
+and the required status check.
+
 ## Neon preview branches
 
 Gives every pull request an isolated, production-forked Neon database that the Vercel

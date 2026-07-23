@@ -1,0 +1,37 @@
+# Organization rulesets run this workflow from gg-ci, outside the target pull
+# request's control. It verifies that each repository still wires its real
+# mandatory jobs into the canonical delivery gate.
+name: Policy gate
+
+on:
+  pull_request:
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  workflow-policy:
+    name: workflow-policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out target repository
+        uses: actions/checkout@v5
+        with:
+          path: target
+
+      - name: Check out trusted policy implementation
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .policy
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: .policy/package-lock.json
+
+      - run: npm ci --prefix .policy
+      - run: npm --prefix .policy run workflow-policy -- "$GITHUB_WORKSPACE/target"

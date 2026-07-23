@@ -4,7 +4,7 @@
 
 **Goal:** Every scoped repository emits one stable quality-gate check, and GitHub plus Vercel can use that check as a fail-closed delivery policy.
 
-**Architecture:** Repository-specific CI jobs stay where they are. A small tested CLI and reusable workflow in `GuestGuru/gg-ci` aggregate their results into one shared check; caller workflows only declare their mandatory job IDs. CODEOWNERS protects the caller workflows and the central execution path from unreviewed gate rewrites. An organization ruleset and Vercel production Deployment Checks consume the measured rendered check name.
+**Architecture:** Repository-specific CI jobs stay where they are. A small tested CLI and reusable workflow in `GuestGuru/gg-ci` aggregate their results into one shared check; caller workflows only declare their mandatory job IDs. A centrally sourced organization-required workflow validates those declarations outside the target PR's control. CODEOWNERS records ownership, while an organization ruleset and Vercel production Deployment Checks enforce the resulting policy.
 
 **Tech Stack:** GitHub Actions reusable workflows, TypeScript, Vitest, GitHub REST API, Vercel Deployment Checks.
 
@@ -12,7 +12,7 @@
 
 - The `gg-ci` repository is public: no GuestGuru project IDs, tokens, or app-specific defaults may be added.
 - Ruleset activation happens only after all targeted repositories have emitted the measured quality-gate check successfully.
-- Required approving review count remains zero for ordinary changes; code-owner review is mandatory for protected workflow/CI-policy paths. Do not activate this rule in a single-member organization where the only code owner is also the PR author.
+- Required approving review count remains zero. Keep required code-owner review off while the organization has only one member; the centrally sourced policy workflow is the enforceable protection against caller gate rewrites.
 - External settings must be read back after every mutation.
 
 ---
@@ -237,6 +237,29 @@ git add .github/workflows README.md
 git commit -m "feat(ci): publish reusable quality gate"
 ```
 
+### Task 2A: Centrally enforce the caller wiring
+
+**Files:**
+- Create: `src/workflow-policy.ts`
+- Create: `test/workflow-policy.test.ts`
+- Create: `.github/workflows/policy-gate.yml`
+- Modify: `package.json`, `package-lock.json`, `.github/actionlint.yaml`
+
+The policy maps each protected repository to one canonical workflow path and exact
+mandatory job list. It rejects missing or extra `needs`, bypassable conditions,
+fabricated `needs-json`, mutable reusable-workflow refs, malformed YAML, and unknown
+repositories. The organization ruleset sources `policy-gate.yml` from `gg-ci`, so a
+target PR cannot replace the validator that checks it.
+
+Validate with:
+
+```bash
+npm test -- test/workflow-policy.test.ts
+npm run typecheck
+actionlint -config-file .github/actionlint.yaml .github/workflows/policy-gate.yml
+GITHUB_REPOSITORY=GuestGuru/gg-ci npm run workflow-policy -- .
+```
+
 ### Task 3: Add caller gates in isolated worktrees
 
 **Files:**
@@ -297,9 +320,9 @@ Use each repository's existing `.worktrees/` directory and verify it is ignored 
 
 All other lines match the first snippet.
 
-- [ ] **Step 3: Protect delivery workflow changes**
+- [ ] **Step 3: Record delivery workflow ownership**
 
-Add `.github/CODEOWNERS` in every caller repo, owning both the file itself and `.github/workflows/`. In `gg-ci`, also own the central workflow, `src/`, package manifests, and TypeScript config. Confirm the named owner can review PRs authored by the delivery agent before enabling `require_code_owner_review`.
+Add `.github/CODEOWNERS` in every caller repo, owning both the file itself and `.github/workflows/`. In `gg-ci`, also own the central workflow, `src/`, package manifests, and TypeScript config. Do not enable `require_code_owner_review` until a second eligible reviewer exists.
 
 - [ ] **Step 4: Validate every workflow and run each repo's documented CI commands**
 
@@ -354,7 +377,7 @@ Payload shape:
       "type": "pull_request",
       "parameters": {
         "dismiss_stale_reviews_on_push": false,
-        "require_code_owner_review": true,
+        "require_code_owner_review": false,
         "require_last_push_approval": false,
         "required_approving_review_count": 0,
         "required_review_thread_resolution": true
@@ -371,6 +394,19 @@ Payload shape:
           }
         ],
         "strict_required_status_checks_policy": false
+      }
+    },
+    {
+      "type": "workflows",
+      "parameters": {
+        "do_not_enforce_on_create": true,
+        "workflows": [
+          {
+            "path": ".github/workflows/policy-gate.yml",
+            "repository_id": "<GG_CI_REPOSITORY_ID>",
+            "ref": "refs/heads/main"
+          }
+        ]
       }
     },
     { "type": "deletion" },

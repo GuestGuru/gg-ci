@@ -40,7 +40,7 @@ Hátrány: hét, egymástól eltérő policy marad; egy job átnevezése vagy fe
 
 ### B. Egységes `quality-gate` check + szervezeti ruleset — választott
 
-Minden fő CI-workflow végén ugyanaz a downstream check fut. A repo-specifikus jobok eredményét a `gg-ci` publikus reusable workflow-ja értékeli. Egyetlen szervezeti ruleset és minden Vercel projekt ugyanazt a checknevet várja.
+Minden fő CI-workflow végén ugyanaz a downstream check fut. A repo-specifikus jobok eredményét a `gg-ci` publikus reusable workflow-ja értékeli. Egy, a rulesetből központilag forrásolt policy workflow ellenőrzi, hogy a PR nem írta-e át vagy kerülte-e meg ezt a bekötést. Egyetlen szervezeti ruleset és minden Vercel projekt ugyanazt a checknevet várja.
 
 Előny: egy policy, stabil checknév, egyszerű audit, a repók saját tesztjei változatlanok maradnak.
 
@@ -77,10 +77,12 @@ Szabályok:
 - az egységes quality gate legyen kötelező és a GitHub Actions appból származzon;
 - force push és branch törlés legyen tiltva;
 - nyitott review thread mellett ne lehessen merge-elni;
-- általános kötelező approving review ne legyen, de a gate-et meghatározó workflow- és központi CI-fájlokat CODEOWNERS védje kötelező code-owner review-val;
+- általános kötelező approving review ne legyen;
+- a ruleset a `gg-ci/.github/workflows/policy-gate.yml` szervezeti required workflow-ját futtassa, amely a cél-PR-től független kóddal ellenőrzi a caller workflow pontos bekötését;
+- a gate-et meghatározó workflow- és központi CI-fájlokhoz legyen CODEOWNERS, de egyszemélyes szervezetben ne legyen bekapcsolva a kötelező code-owner review;
 - ne legyen állandó bypass actor.
 
-A rollout kétfázisú: a workflow-k bevezetése és zöld tesztelése alatt a ruleset disabled/evaluate állapotban marad; aktív csak akkor lesz, amikor mind a hét repó ugyanazt a zöld checket már ténylegesen kibocsátotta. A code-owner review csak akkor aktiválható, ha a PR szerzőjén kívül van legalább egy jogosult reviewer; egyszemélyes orgban külön döntés nélkül deadlock lenne. Így a policy soha nem zárja ki véletlenül az összes merge-et.
+A rollout kétfázisú: a workflow-k bevezetése és zöld tesztelése alatt a ruleset disabled állapotban marad; aktív csak akkor lesz, amikor a központi policy workflow már a `gg-ci` default branchén van, és mind a hét repó ugyanazt a zöld checket ténylegesen kibocsátotta. A kötelező code-owner review csak akkor aktiválható, ha a PR szerzőjén kívül van legalább egy jogosult reviewer; a jelenlegi egyszemélyes orgban ez deadlock lenne. A központi required workflow e nélkül is megakadályozza, hogy egy cél-PR saját maga lazítsa fel a gate definícióját.
 
 ## 3. Vercel production Deployment Checks
 
