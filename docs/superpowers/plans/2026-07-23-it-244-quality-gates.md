@@ -250,9 +250,11 @@ mandatory job list, and SHA-256 inventory of every file under `.github/workflows
 It rejects missing or extra `needs`, bypassable conditions, fabricated `needs-json`,
 mutable reusable-workflow refs, malformed YAML, unknown repositories, and any added,
 removed, or changed workflow file. The organization ruleset sources `policy-gate.yml`
-from `gg-ci`, so a target PR cannot replace the validator that checks it. Intentional
-workflow changes require the central inventory PR to merge before the pre-approved
-target workflow change.
+from an immutable `gg-ci` commit SHA, so a target PR cannot replace the validator that
+checks it. For `gg-ci`, the pinned validator also checks the evaluator and package trust
+inventory. Intentional workflow changes require the central inventory PR to merge
+before the pre-approved target workflow change. Central policy releases require an
+explicit ruleset pin to the reviewed candidate SHA and then the resulting main SHA.
 
 Validate with:
 
@@ -407,7 +409,7 @@ Payload shape:
           {
             "path": ".github/workflows/policy-gate.yml",
             "repository_id": "<GG_CI_REPOSITORY_ID>",
-            "ref": "refs/heads/main"
+            "sha": "<PINNED_GG_CI_COMMIT_SHA>"
           }
         ]
       }

@@ -78,11 +78,11 @@ Szabályok:
 - force push és branch törlés legyen tiltva;
 - nyitott review thread mellett ne lehessen merge-elni;
 - általános kötelező approving review ne legyen;
-- a ruleset a `gg-ci/.github/workflows/policy-gate.yml` szervezeti required workflow-ját futtassa, amely a cél-PR-től független kóddal ellenőrzi a caller workflow pontos bekötését és a teljes `.github/workflows` könyvtár előre jóváhagyott SHA-256 inventoryját;
+- a ruleset a `gg-ci/.github/workflows/policy-gate.yml` szervezeti required workflow-ját konkrét, immutable commit SHA-ról futtassa, ne a mozgó `main` refről; a pinelt kód a cél-PR-től függetlenül ellenőrzi a caller workflow pontos bekötését, a teljes `.github/workflows` könyvtár előre jóváhagyott SHA-256 inventoryját, a `gg-ci` esetében pedig a központi evaluator- és package-fájlok trust inventoryját is;
 - a gate-et meghatározó workflow- és központi CI-fájlokhoz legyen CODEOWNERS, de egyszemélyes szervezetben ne legyen bekapcsolva a kötelező code-owner review;
 - ne legyen állandó bypass actor.
 
-A rollout kétfázisú: a workflow-k bevezetése és zöld tesztelése alatt a ruleset disabled állapotban marad; aktív csak akkor lesz, amikor a központi policy workflow már a `gg-ci` default branchén van, és mind a hét repó ugyanazt a zöld checket ténylegesen kibocsátotta. A kötelező code-owner review csak akkor aktiválható, ha a PR szerzőjén kívül van legalább egy jogosult reviewer; a jelenlegi egyszemélyes orgban ez deadlock lenne. A központi required workflow e nélkül is megakadályozza, hogy egy cél-PR saját maga lazítsa fel a gate vagy a kötelező jobok definícióját. Szándékos workflow-módosításnál előbb a `gg-ci` inventory-frissítése kerül külön PR-ban mainre, és csak utána merge-elhető a már előre jóváhagyott cél-workflow.
+A rollout kétfázisú: a workflow-k bevezetése és zöld tesztelése alatt a ruleset disabled állapotban marad; aktív csak akkor lesz, amikor a központi policy workflow már a `gg-ci` default branchén van, annak pontos commit SHA-ja bekerült a rulesetbe, és mind a hét repó ugyanazt a zöld checket ténylegesen kibocsátotta. A kötelező code-owner review csak akkor aktiválható, ha a PR szerzőjén kívül van legalább egy jogosult reviewer; a jelenlegi egyszemélyes orgban ez deadlock lenne. A központi required workflow e nélkül is megakadályozza, hogy egy cél-PR saját maga lazítsa fel a gate, a kötelező jobok vagy a központi evaluator definícióját. Szándékos workflow-módosításnál előbb a `gg-ci` inventory-frissítése kerül külön PR-ban mainre, és csak utána merge-elhető a már előre jóváhagyott cél-workflow. Központi policy-frissítéshez a ruleset pinjét explicit a reviewed candidate SHA-ra, majd merge után a létrejött main SHA-ra kell állítani.
 
 ## 3. Vercel production Deployment Checks
 

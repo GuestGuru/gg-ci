@@ -34,11 +34,18 @@ the pull request cannot replace the policy that checks it. The workflow runs
 job IDs, `always()` condition, reusable-workflow reference, and `needs-json` input for
 each protected repository. It also verifies a SHA-256 inventory of the complete
 `.github/workflows` directory, so a pull request cannot weaken a mandatory job, add a
-lookalike check, or silently change another delivery workflow.
+lookalike check, or silently change another delivery workflow. For `gg-ci` itself, the
+policy also hashes the central evaluator and package files listed in
+`src/trust-inventory.json`.
 
 An intentional workflow change is a two-PR operation: first update and merge the
 approved inventory here, then change the target repository to the pre-approved content.
 This keeps the trusted policy update outside the target pull request.
+
+The organization ruleset must pin this required workflow to an immutable commit `sha`,
+never `refs/heads/main`. Updating the central policy is an explicit release operation:
+pin the ruleset to the reviewed candidate SHA, verify it, merge it, then pin the ruleset
+to the resulting main commit SHA.
 
 Rollout order matters: merge `gg-ci`, switch every caller from its temporary test ref
 to `@main`, verify all checks, and only then enable the organization ruleset workflow

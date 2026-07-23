@@ -106,6 +106,10 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 }
 
+const approvedCentralTrustInventory = JSON.parse(
+	readFileSync(new URL('./trust-inventory.json', import.meta.url), 'utf8'),
+) as Record<string, string>
+
 type UnknownRecord = Record<string, unknown>
 
 function asRecord(value: unknown): UnknownRecord | undefined {
@@ -125,6 +129,21 @@ export function workflowInventoryForRepository(
 	repository: string,
 ): Record<string, string> | undefined {
 	return approvedWorkflowInventories[repository]
+}
+
+export function centralTrustInventory(): Record<string, string> {
+	return approvedCentralTrustInventory
+}
+
+export function collectCentralTrustInventory(
+	targetRoot: string,
+): Record<string, string> {
+	return Object.fromEntries(
+		Object.keys(approvedCentralTrustInventory).map((relativePath) => [
+			relativePath,
+			hashWorkflow(readFileSync(join(targetRoot, relativePath), 'utf8')),
+		]),
+	)
 }
 
 export function collectWorkflowInventory(
@@ -162,10 +181,25 @@ function validateWorkflowInventory(
 	return errors
 }
 
+function validateCentralTrustInventory(
+	actual: Record<string, string>,
+): string[] {
+	const errors: string[] = []
+	for (const path of Object.keys(approvedCentralTrustInventory).sort()) {
+		if (!(path in actual)) {
+			errors.push(`Central trust file is missing: ${path}`)
+		} else if (actual[path] !== approvedCentralTrustInventory[path]) {
+			errors.push(`Central trust file is not approved: ${path}`)
+		}
+	}
+	return errors
+}
+
 export function validateWorkflowPolicy(
 	repository: string,
 	workflowYaml: string,
 	actualInventory: Record<string, string>,
+	actualCentralTrustInventory?: Record<string, string>,
 ): string[] {
 	const policy = policyForRepository(repository)
 	if (!policy) return [`No workflow policy is configured for ${repository}`]
@@ -211,7 +245,16 @@ export function validateWorkflowPolicy(
 		)
 	}
 
-	return [...errors, ...validateWorkflowInventory(expectedInventory, actualInventory)]
+	const centralErrors =
+		repository === 'GuestGuru/gg-ci'
+			? validateCentralTrustInventory(actualCentralTrustInventory ?? {})
+			: []
+
+	return [
+		...errors,
+		...validateWorkflowInventory(expectedInventory, actualInventory),
+		...centralErrors,
+	]
 }
 
 export function run(argv: string[], env: NodeJS.ProcessEnv = process.env): number {
@@ -225,9 +268,13 @@ export function run(argv: string[], env: NodeJS.ProcessEnv = process.env): numbe
 	const targetRoot = argv[0] ?? '.'
 	let workflowYaml: string
 	let actualInventory: Record<string, string>
+	let actualCentralTrustInventory: Record<string, string> | undefined
 	try {
 		workflowYaml = readFileSync(join(targetRoot, policy.workflowPath), 'utf8')
 		actualInventory = collectWorkflowInventory(targetRoot)
+		if (repository === 'GuestGuru/gg-ci') {
+			actualCentralTrustInventory = collectCentralTrustInventory(targetRoot)
+		}
 	} catch {
 		console.error(
 			`workflow-policy: cannot read ${policy.workflowPath} or workflow inventory`,
@@ -235,7 +282,12 @@ export function run(argv: string[], env: NodeJS.ProcessEnv = process.env): numbe
 		return 1
 	}
 
-	const errors = validateWorkflowPolicy(repository, workflowYaml, actualInventory)
+	const errors = validateWorkflowPolicy(
+		repository,
+		workflowYaml,
+		actualInventory,
+		actualCentralTrustInventory,
+	)
 	if (errors.length === 0) {
 		console.log(`workflow-policy: ${repository} uses the canonical quality gate`)
 		return 0

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+	centralTrustInventory,
 	hashWorkflow,
 	policyForRepository,
 	validateWorkflowPolicy,
@@ -143,5 +144,31 @@ describe('workflow policy', () => {
 		expect(hashWorkflow('abc')).toBe(
 			'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
 		)
+	})
+
+	it('rejects changes to the central trust implementation', () => {
+		const workflow = `
+jobs:
+  test: {}
+  quality-gate:
+    if: \${{ always() }}
+    needs: [test]
+    uses: ./.github/workflows/quality-gate.yml
+    with:
+      needs-json: \${{ toJSON(needs) }}
+`
+		const changedTrust = {
+			...centralTrustInventory(),
+			'src/quality-gate.ts': hashWorkflow('export const pass = true'),
+		}
+
+		expect(
+			validateWorkflowPolicy(
+				'GuestGuru/gg-ci',
+				workflow,
+				workflowInventoryForRepository('GuestGuru/gg-ci') ?? {},
+				changedTrust,
+			),
+		).toContain('Central trust file is not approved: src/quality-gate.ts')
 	})
 })
