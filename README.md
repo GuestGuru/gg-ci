@@ -7,14 +7,25 @@ default values here.
 ## Organization quality gate
 
 `.github/workflows/quality-gate.yml` turns a caller workflow's required job results into
-one stable final check. This lets an organization ruleset and deployment platform depend
-on the same check name even when repositories have different test jobs.
+one stable final result. Call it twice with different job names: the organization
+ruleset uses `quality-gate / verify`, while Vercel uses
+`deployment-gate / verify`. The result and dependencies are identical, but the names
+must differ because GitHub check runs can race when the same context is consumed by both
+a ruleset and a Vercel Deployment Check.
 
-Call it after every mandatory CI job:
+Call both gates after every mandatory CI job:
 
 ```yaml
 quality-gate:
   name: quality-gate
+  if: ${{ always() }}
+  needs: [lint, test]
+  uses: GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main
+  with:
+    needs-json: ${{ toJSON(needs) }}
+
+deployment-gate:
+  name: deployment-gate
   if: ${{ always() }}
   needs: [lint, test]
   uses: GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main
@@ -31,8 +42,8 @@ missing results, malformed JSON, and an empty dependency set all fail closed.
 Because GitHub loads it from this repository rather than from the target pull request,
 the pull request cannot replace the policy that checks it. The workflow runs
 `src/workflow-policy.ts`, which verifies the exact canonical workflow path, mandatory
-job IDs, `always()` condition, reusable-workflow reference, and `needs-json` input for
-each protected repository. It also verifies a SHA-256 inventory of the complete
+job IDs, distinct gate names, `always()` condition, reusable-workflow reference, and
+`needs-json` input for each protected repository. It also verifies a SHA-256 inventory of the complete
 `.github/workflows` directory, so a pull request cannot weaken a mandatory job, add a
 lookalike check, or silently change another delivery workflow. For `gg-ci` itself, the
 policy also hashes the central evaluator and package files listed in

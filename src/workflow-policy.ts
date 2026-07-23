@@ -66,17 +66,17 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/gg-sales': {
 		'.github/workflows/ci.yml':
-			'2c11b8fbcd1cb401850b147d197d20995c0ea7ae344bd31e4f1a1465ce25ff1d',
+			'0b5eecc6a4d08af4c92a8704a79a21dbf4cb6188fbd406a2b32901f5b6257576',
 		'.github/workflows/preview-alias.yml':
 			'08dca5ce6939e333e8ffea8e407141772145913f764a7a981344ed7515926182',
 	},
 	'GuestGuru/gg-design': {
 		'.github/workflows/registry.yml':
-			'e4e1527a8df6297bba2260afcd48d765de2bcbd3a23e557a20cac1679c887457',
+			'1556676da86d42ddd443730cba6c2968f362661e9e1038fc187d1649cac3d6a3',
 	},
 	'GuestGuru/BPDBv2': {
 		'.github/workflows/ci.yml':
-			'4f4d9e27da1e704f5ffd5c0588000146a34b903ce25142f0128775a5fa10d182',
+			'a99896dcdd91bec9c98cd42870bde320345402dd47c5929b96935ec1de9e8d96',
 		'.github/workflows/preview-alias.yml':
 			'524d91905016436425ec88234f7a3d15bbdabce1a822aa6d392673a64a07443b',
 		'.github/workflows/preview-db.yml':
@@ -84,13 +84,13 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/gg-agents': {
 		'.github/workflows/ci.yml':
-			'f809f43748b46f1dfaaec322cae2ff6fc40107353425f1133cf382212a7854f4',
+			'06d7c1b042438b84168e0cc4f1d9b99d01812df571623c1e42378e53cef14231',
 		'.github/workflows/preview-alias.yml':
 			'5f0cfd51456130a1ecb6951065c78a9ce4820750cd635b41d390fbb63e3aa88a',
 	},
 	'GuestGuru/tools': {
 		'.github/workflows/ci.yml':
-			'96d4952f07451511685a9db4a46e4fc25cb100cd2e2ca5edc398b7c465780b04',
+			'e8adc8482ea990fd1161d8b58d5a94c294c65884508d34d226852610c6d445f4',
 		'.github/workflows/preview-alias.yml':
 			'fdb04ab9bb5073b6547e02fde430442f58d31af9d584823f684f56af45c5a9a0',
 		'.github/workflows/preview-db.yml':
@@ -100,7 +100,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/irnok': {
 		'.github/workflows/ci.yml':
-			'0c58508f47a15c460e4ed69835a94c86776752a2b6195c8e9f57008ab165a116',
+			'6fa57e2db9447c3689733c0c044872155fa25dbb58318c55b71e6956d470c298',
 		'.github/workflows/preview-alias.yml':
 			'75ce44abc0f143b24aae722b50f90bec6affee473b9089b6613386854a61d3ef',
 	},
@@ -120,6 +120,43 @@ type UnknownRecord = Record<string, unknown>
 function asRecord(value: unknown): UnknownRecord | undefined {
 	if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
 	return value as UnknownRecord
+}
+
+function validateGate(
+	jobs: UnknownRecord | undefined,
+	gateName: 'quality-gate' | 'deployment-gate',
+	policy: WorkflowPolicy,
+): string[] {
+	const gate = asRecord(jobs?.[gateName])
+	if (!gate) return [`Workflow must define a ${gateName} job`]
+
+	const errors: string[] = []
+	if (gate.name !== gateName) {
+		errors.push(`${gateName}.name must be exactly ${gateName}`)
+	}
+	if (gate.if !== '${{ always() }}') {
+		errors.push(`${gateName}.if must be exactly \${{ always() }}`)
+	}
+	if (
+		!Array.isArray(gate.needs) ||
+		gate.needs.length !== policy.requiredNeeds.length ||
+		gate.needs.some((need, index) => need !== policy.requiredNeeds[index])
+	) {
+		errors.push(
+			`${gateName}.needs must be exactly [${policy.requiredNeeds.join(', ')}]`,
+		)
+	}
+	if (gate.uses !== policy.uses) {
+		errors.push(`${gateName}.uses must be ${policy.uses}`)
+	}
+
+	const inputs = asRecord(gate.with)
+	if (inputs?.['needs-json'] !== '${{ toJSON(needs) }}') {
+		errors.push(
+			`${gateName}.with.needs-json must be exactly \${{ toJSON(needs) }}`,
+		)
+	}
+	return errors
 }
 
 export function policyForRepository(repository: string): WorkflowPolicy | undefined {
@@ -221,33 +258,9 @@ export function validateWorkflowPolicy(
 	}
 
 	const jobs = asRecord(asRecord(workflow)?.jobs)
-	const gate = asRecord(jobs?.['quality-gate'])
-	if (!gate) return ['Workflow must define a quality-gate job']
-
-	const errors: string[] = []
-	if (gate.if !== '${{ always() }}') {
-		errors.push('quality-gate.if must be exactly ${{ always() }}')
-	}
-
-	if (
-		!Array.isArray(gate.needs) ||
-		gate.needs.length !== policy.requiredNeeds.length ||
-		gate.needs.some((need, index) => need !== policy.requiredNeeds[index])
-	) {
-		errors.push(
-			`quality-gate.needs must be exactly [${policy.requiredNeeds.join(', ')}]`,
-		)
-	}
-
-	if (gate.uses !== policy.uses) {
-		errors.push(`quality-gate.uses must be ${policy.uses}`)
-	}
-
-	const inputs = asRecord(gate.with)
-	if (inputs?.['needs-json'] !== '${{ toJSON(needs) }}') {
-		errors.push(
-			'quality-gate.with.needs-json must be exactly ${{ toJSON(needs) }}',
-		)
+	const errors = validateGate(jobs, 'quality-gate', policy)
+	if (repository !== 'GuestGuru/gg-ci') {
+		errors.push(...validateGate(jobs, 'deployment-gate', policy))
 	}
 
 	const centralErrors =

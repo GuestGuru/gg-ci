@@ -22,6 +22,13 @@ jobs:
     uses: GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main
     with:
       needs-json: \${{ toJSON(needs) }}
+  deployment-gate:
+    name: deployment-gate
+    if: \${{ always() }}
+    needs: [ci]
+    uses: GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main
+    with:
+      needs-json: \${{ toJSON(needs) }}
 `
 
 const salesInventory =
@@ -73,6 +80,29 @@ describe('workflow policy', () => {
 
 		expect(validateWorkflowPolicy('GuestGuru/gg-sales', workflow, salesInventory)).toContain(
 			'quality-gate.needs must be exactly [ci]',
+		)
+	})
+
+	it('requires a distinct Vercel deployment gate with the same dependencies', () => {
+		const missing = validSalesWorkflow.replace(
+			/  deployment-gate:[\s\S]*$/,
+			'',
+		)
+		const weakened = validSalesWorkflow.replace(
+			'  deployment-gate:\n    name: deployment-gate\n    if: ${{ always() }}\n    needs: [ci]',
+			'  deployment-gate:\n    name: deployment-gate\n    if: ${{ success() }}\n    needs: []',
+		)
+
+		expect(
+			validateWorkflowPolicy('GuestGuru/gg-sales', missing, salesInventory),
+		).toContain('Workflow must define a deployment-gate job')
+		expect(
+			validateWorkflowPolicy('GuestGuru/gg-sales', weakened, salesInventory),
+		).toEqual(
+			expect.arrayContaining([
+				'deployment-gate.if must be exactly ${{ always() }}',
+				'deployment-gate.needs must be exactly [ci]',
+			]),
 		)
 	})
 
