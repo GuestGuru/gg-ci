@@ -1,0 +1,13 @@
+# actionlint 1.7.12 does not yet model GitHub's `job.workflow_sha`
+# context for reusable workflows. Keep this suppression scoped to the three
+# reusable workflows that intentionally use it.
+paths:
+  .github/workflows/neon-preview.yml:
+    ignore:
+      - 'property "workflow_sha" is not defined in object type'
+  .github/workflows/preview-alias.yml:
+    ignore:
+      - 'property "workflow_sha" is not defined in object type'
+  .github/workflows/quality-gate.yml:
+    ignore:
+      - 'property "workflow_sha" is not defined in object type'
