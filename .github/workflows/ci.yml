@@ -22,3 +22,11 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+
+  quality-gate:
+    name: quality-gate
+    if: ${{ always() }}
+    needs: [test]
+    uses: ./.github/workflows/quality-gate.yml
+    with:
+      needs-json: ${{ toJSON(needs) }}

@@ -1,0 +1,8 @@
+# The central CI implementation is a delivery-policy trust boundary.
+/.github/CODEOWNERS @kratam
+/.github/actionlint.yaml @kratam
+/.github/workflows/ @kratam
+/src/ @kratam
+/package.json @kratam
+/package-lock.json @kratam
+/tsconfig.json @kratam

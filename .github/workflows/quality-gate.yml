@@ -1,0 +1,39 @@
+# Reusable final gate for repository-specific CI jobs.
+#
+# The caller passes toJSON(needs), so this job still runs after a failed,
+# cancelled, or skipped dependency and turns every non-success into one stable
+# organization-wide required check.
+name: Quality gate
+
+on:
+  workflow_call:
+    inputs:
+      needs-json:
+        description: "The caller's required jobs as toJSON(needs)."
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          repository: GuestGuru/gg-ci
+          ref: ${{ job.workflow_sha }}
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci --ignore-scripts --userconfig=/dev/null
+
+      - name: Verify required jobs
+        env:
+          NEEDS_JSON: ${{ inputs.needs-json }}
+          NODE_OPTIONS: ""
+        run: node node_modules/tsx/dist/cli.mjs src/quality-gate.ts "$NEEDS_JSON"

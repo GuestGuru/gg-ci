@@ -4,6 +4,56 @@ Cross-app CI infrastructure for GuestGuru. **This repository is public** — it 
 generic glue code only. Never add infrastructure identifiers, tokens, or app-specific
 default values here.
 
+## Organization quality gate
+
+`.github/workflows/quality-gate.yml` turns a caller workflow's required job results into
+one stable final check. This lets an organization ruleset and deployment platform depend
+on the same check name even when repositories have different test jobs.
+
+Call it after every mandatory CI job:
+
+```yaml
+quality-gate:
+  name: quality-gate
+  if: ${{ always() }}
+  needs: [lint, test]
+  uses: GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main
+  with:
+    needs-json: ${{ toJSON(needs) }}
+```
+
+`if: always()` is essential: without it GitHub skips the final job when a dependency
+fails, leaving a required check pending instead of reporting a useful failure.
+Every direct dependency must finish with `success`; `failure`, `cancelled`, `skipped`,
+missing results, malformed JSON, and an empty dependency set all fail closed.
+
+`.github/workflows/policy-gate.yml` is the matching organization-required workflow.
+Because GitHub loads it from this repository rather than from the target pull request,
+the pull request cannot replace the policy that checks it. The workflow runs
+`src/workflow-policy.ts`, which verifies the exact canonical workflow path, mandatory
+job IDs, `always()` condition, reusable-workflow reference, and `needs-json` input for
+each protected repository. It also verifies a SHA-256 inventory of the complete
+`.github/workflows` directory, so a pull request cannot weaken a mandatory job, add a
+lookalike check, or silently change another delivery workflow. For `gg-ci` itself, the
+policy also hashes the central evaluator and package files listed in
+`src/trust-inventory.json`; the pinned policy independently hashes that manifest too.
+Both policy evaluators run through a direct Node entry point with an empty
+`NODE_OPTIONS`, while dependency installation disables lifecycle scripts. This keeps
+target-repository npm configuration outside the trust path.
+
+An intentional workflow change is a two-PR operation: first update and merge the
+approved inventory here, then change the target repository to the pre-approved content.
+This keeps the trusted policy update outside the target pull request.
+
+The organization ruleset must pin this required workflow to an immutable commit `sha`,
+never `refs/heads/main`. Updating the central policy is an explicit release operation:
+pin the ruleset to the reviewed candidate SHA, verify it, merge it, then pin the ruleset
+to the resulting main commit SHA.
+
+Rollout order matters: merge `gg-ci`, switch every caller from its temporary test ref
+to `@main`, verify all checks, and only then enable the organization ruleset workflow
+and the required status check.
+
 ## Neon preview branches
 
 Gives every pull request an isolated, production-forked Neon database that the Vercel
@@ -253,6 +303,18 @@ Some libraries and migration tools cannot go through the connection pooler and n
 `ensure` requests the same branch's URI a second time with `pooled=false`, writing it into
 that key on the same Preview + git-branch scope; `destroy` removes it along with the
 others. Leave the input unset and nothing changes — only the pooled URI is written.
+
+### Testing a change to these workflows
+
+The reusable workflows check out the CLI at `job.workflow_sha` — the
+commit the workflow YAML itself came from. Pointing a caller at a branch
+(`neon-preview.yml@my-branch`) therefore runs that branch's CLI too, so a change
+can be validated before it lands on `main`.
+
+This was not always the case: the checkout was pinned to `ref: main`, which made
+every test run execute main's code. An input added on a branch reached a CLI
+that did not know it and dropped it silently — a green run that did nothing.
+Found while onboarding `GuestGuru/tools`, 2026-07-19.
 
 ### Notes
 

@@ -49,10 +49,18 @@ jobs:
     outputs:
       preview-url: ${{ steps.alias.outputs.preview-url }}
     steps:
+      # A CLI-t ABBÓL a commitból töltjük, amelyikből ez a workflow YAML jött.
+      # A `job.workflow_sha` reusable workflow-nál pontosan ezt adja meg.
+      #
+      # Korábban itt `ref: main` állt: a hívó hiába mutatott egy feature
+      # branchre, a CLI mindig a main-ről jött. Egy ott bevezetett új input a
+      # main-es CLI-hez ért, ami nem ismerte és némán eldobta — a run zöld lett,
+      # és nem történt semmi. A workflow-változás így csak merge után volt
+      # tesztelhető (measured while onboarding GuestGuru/tools, 2026-07-19).
       - uses: actions/checkout@v5
         with:
           repository: GuestGuru/gg-ci
-          ref: main
+          ref: ${{ job.workflow_sha }}
 
       - uses: actions/setup-node@v5
         with:
