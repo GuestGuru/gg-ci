@@ -77,10 +77,10 @@ Szabályok:
 - az egységes quality gate legyen kötelező és a GitHub Actions appból származzon;
 - force push és branch törlés legyen tiltva;
 - nyitott review thread mellett ne lehessen merge-elni;
-- kötelező approving review ne legyen, mert az autonóm agent-flowban a tulajdonosi preview és a zöld gate a döntési pont;
+- általános kötelező approving review ne legyen, de a gate-et meghatározó workflow- és központi CI-fájlokat CODEOWNERS védje kötelező code-owner review-val;
 - ne legyen állandó bypass actor.
 
-A rollout kétfázisú: a workflow-k bevezetése és zöld tesztelése alatt a ruleset disabled/evaluate állapotban marad; aktív csak akkor lesz, amikor mind a hét repó ugyanazt a zöld checket már ténylegesen kibocsátotta. Így a policy soha nem zárja ki véletlenül az összes merge-et.
+A rollout kétfázisú: a workflow-k bevezetése és zöld tesztelése alatt a ruleset disabled/evaluate állapotban marad; aktív csak akkor lesz, amikor mind a hét repó ugyanazt a zöld checket már ténylegesen kibocsátotta. A code-owner review csak akkor aktiválható, ha a PR szerzőjén kívül van legalább egy jogosult reviewer; egyszemélyes orgban külön döntés nélkül deadlock lenne. Így a policy soha nem zárja ki véletlenül az összes merge-et.
 
 ## 3. Vercel production Deployment Checks
 

@@ -4,7 +4,7 @@
 
 **Goal:** Every scoped repository emits one stable quality-gate check, and GitHub plus Vercel can use that check as a fail-closed delivery policy.
 
-**Architecture:** Repository-specific CI jobs stay where they are. A small tested CLI and reusable workflow in `GuestGuru/gg-ci` aggregate their results into one shared check; caller workflows only declare their mandatory job IDs. An organization ruleset and Vercel production Deployment Checks consume the measured rendered check name.
+**Architecture:** Repository-specific CI jobs stay where they are. A small tested CLI and reusable workflow in `GuestGuru/gg-ci` aggregate their results into one shared check; caller workflows only declare their mandatory job IDs. CODEOWNERS protects the caller workflows and the central execution path from unreviewed gate rewrites. An organization ruleset and Vercel production Deployment Checks consume the measured rendered check name.
 
 **Tech Stack:** GitHub Actions reusable workflows, TypeScript, Vitest, GitHub REST API, Vercel Deployment Checks.
 
@@ -12,7 +12,7 @@
 
 - The `gg-ci` repository is public: no GuestGuru project IDs, tokens, or app-specific defaults may be added.
 - Ruleset activation happens only after all targeted repositories have emitted the measured quality-gate check successfully.
-- Required approving review count remains zero; PR use, successful checks, resolved threads, no force-push, and no deletion are mandatory.
+- Required approving review count remains zero for ordinary changes; code-owner review is mandatory for protected workflow/CI-policy paths. Do not activate this rule in a single-member organization where the only code owner is also the PR author.
 - External settings must be read back after every mutation.
 
 ---
@@ -246,6 +246,7 @@ git commit -m "feat(ci): publish reusable quality gate"
 - Modify: `gg-agents/.github/workflows/ci.yml`
 - Modify: `tools/.github/workflows/ci.yml`
 - Modify: `irnok/.github/workflows/ci.yml`
+- Create: `.github/CODEOWNERS` in every scoped repository
 - Modify: each repo's delivery documentation (`CLAUDE.md`, `AGENTS.md`, or architecture doc as applicable)
 
 **Interfaces:**
@@ -296,11 +297,15 @@ Use each repository's existing `.worktrees/` directory and verify it is ignored 
 
 All other lines match the first snippet.
 
-- [ ] **Step 3: Validate every workflow and run each repo's documented CI commands**
+- [ ] **Step 3: Protect delivery workflow changes**
+
+Add `.github/CODEOWNERS` in every caller repo, owning both the file itself and `.github/workflows/`. In `gg-ci`, also own the central workflow, `src/`, package manifests, and TypeScript config. Confirm the named owner can review PRs authored by the delivery agent before enabling `require_code_owner_review`.
+
+- [ ] **Step 4: Validate every workflow and run each repo's documented CI commands**
 
 Expected: workflow lint PASS and every existing CI job command PASS before commit.
 
-- [ ] **Step 4: Commit and open one draft PR per repository**
+- [ ] **Step 5: Commit and open one draft PR per repository**
 
 Use commit message:
 
@@ -349,7 +354,7 @@ Payload shape:
       "type": "pull_request",
       "parameters": {
         "dismiss_stale_reviews_on_push": false,
-        "require_code_owner_review": false,
+        "require_code_owner_review": true,
         "require_last_push_approval": false,
         "required_approving_review_count": 0,
         "required_review_thread_resolution": true
