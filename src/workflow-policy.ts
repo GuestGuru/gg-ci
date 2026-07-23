@@ -62,21 +62,21 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/preview-alias.yml':
 			'ca031300070019570033a99aa51598163a63813a341ff7c57f7771d190adabf6',
 		'.github/workflows/quality-gate.yml':
-			'3d5c1c79dcca5d52c8c4293cb02a983980217b21418251dd27df879277013b31',
+			'c8ac8ec8ebf410f5476bf56845c1092dc9f6c20a9428e3bbf332ebfaa0685719',
 	},
 	'GuestGuru/gg-sales': {
 		'.github/workflows/ci.yml':
-			'0b5eecc6a4d08af4c92a8704a79a21dbf4cb6188fbd406a2b32901f5b6257576',
+			'fe6a40a035df06bca6d51f377c1ac819c78662b4631c8a77f2ceff22d7b46c60',
 		'.github/workflows/preview-alias.yml':
 			'08dca5ce6939e333e8ffea8e407141772145913f764a7a981344ed7515926182',
 	},
 	'GuestGuru/gg-design': {
 		'.github/workflows/registry.yml':
-			'1556676da86d42ddd443730cba6c2968f362661e9e1038fc187d1649cac3d6a3',
+			'47ac03c2b34bf3eb9354a3cf800e4ac37a8f25b7b82a873e0902eb13ca884817',
 	},
 	'GuestGuru/BPDBv2': {
 		'.github/workflows/ci.yml':
-			'a99896dcdd91bec9c98cd42870bde320345402dd47c5929b96935ec1de9e8d96',
+			'a7a65be5a309e6042a2d729ea73ddf88e97d3c9adaeb2535b3ecb4ce723c9ca9',
 		'.github/workflows/preview-alias.yml':
 			'524d91905016436425ec88234f7a3d15bbdabce1a822aa6d392673a64a07443b',
 		'.github/workflows/preview-db.yml':
@@ -84,13 +84,13 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/gg-agents': {
 		'.github/workflows/ci.yml':
-			'06d7c1b042438b84168e0cc4f1d9b99d01812df571623c1e42378e53cef14231',
+			'f3ab88254af6da44650a778f88ff8e492e28667d9f10fea1d429e16e49a6ff2d',
 		'.github/workflows/preview-alias.yml':
 			'5f0cfd51456130a1ecb6951065c78a9ce4820750cd635b41d390fbb63e3aa88a',
 	},
 	'GuestGuru/tools': {
 		'.github/workflows/ci.yml':
-			'e8adc8482ea990fd1161d8b58d5a94c294c65884508d34d226852610c6d445f4',
+			'e485e8c1e4a2214057c026c9f97a3f0d59b27c907ded0b198b137b5cff3b27e1',
 		'.github/workflows/preview-alias.yml':
 			'fdb04ab9bb5073b6547e02fde430442f58d31af9d584823f684f56af45c5a9a0',
 		'.github/workflows/preview-db.yml':
@@ -100,7 +100,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/irnok': {
 		'.github/workflows/ci.yml':
-			'6fa57e2db9447c3689733c0c044872155fa25dbb58318c55b71e6956d470c298',
+			'58be3ce8c71441817833d6faa2a7acc4def1bc30677a1073b5d235dd288f9ae3',
 		'.github/workflows/preview-alias.yml':
 			'75ce44abc0f143b24aae722b50f90bec6affee473b9089b6613386854a61d3ef',
 	},
@@ -155,6 +155,21 @@ function validateGate(
 		errors.push(
 			`${gateName}.with.needs-json must be exactly \${{ toJSON(needs) }}`,
 		)
+	}
+	if (
+		gateName === 'deployment-gate' &&
+		inputs?.['status-context'] !== 'GG deployment gate'
+	) {
+		errors.push(
+			'deployment-gate.with.status-context must be exactly GG deployment gate',
+		)
+	}
+	if (
+		gateName === 'quality-gate' &&
+		inputs &&
+		'status-context' in inputs
+	) {
+		errors.push('quality-gate.with.status-context must be omitted')
 	}
 	return errors
 }

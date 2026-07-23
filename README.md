@@ -9,9 +9,10 @@ default values here.
 `.github/workflows/quality-gate.yml` turns a caller workflow's required job results into
 one stable final result. Call it twice with different job names: the organization
 ruleset uses `quality-gate / verify`, while Vercel uses
-`deployment-gate / verify`. The result and dependencies are identical, but the names
-must differ because GitHub check runs can race when the same context is consumed by both
-a ruleset and a Vercel Deployment Check.
+the explicit `GG deployment gate` commit status published by `deployment-gate`.
+The result and dependencies are identical, but Vercel must consume the commit status
+rather than the job's Check Run because GitHub Check Run synchronization can race with
+Vercel Deployment Checks.
 
 Call both gates after every mandatory CI job:
 
@@ -31,6 +32,7 @@ deployment-gate:
   uses: GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main
   with:
     needs-json: ${{ toJSON(needs) }}
+    status-context: GG deployment gate
 ```
 
 `if: always()` is essential: without it GitHub skips the final job when a dependency

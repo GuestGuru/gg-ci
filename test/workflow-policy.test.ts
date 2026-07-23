@@ -29,6 +29,7 @@ jobs:
     uses: GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main
     with:
       needs-json: \${{ toJSON(needs) }}
+      status-context: GG deployment gate
 `
 
 const salesInventory =
@@ -103,6 +104,28 @@ describe('workflow policy', () => {
 				'deployment-gate.if must be exactly ${{ always() }}',
 				'deployment-gate.needs must be exactly [ci]',
 			]),
+		)
+	})
+
+	it('requires the deployment gate to publish the dedicated Vercel status', () => {
+		const missing = validSalesWorkflow.replace(
+			'\n      status-context: GG deployment gate',
+			'',
+		)
+		const changed = validSalesWorkflow.replace(
+			'status-context: GG deployment gate',
+			'status-context: quality-gate / verify',
+		)
+
+		expect(
+			validateWorkflowPolicy('GuestGuru/gg-sales', missing, salesInventory),
+		).toContain(
+			'deployment-gate.with.status-context must be exactly GG deployment gate',
+		)
+		expect(
+			validateWorkflowPolicy('GuestGuru/gg-sales', changed, salesInventory),
+		).toContain(
+			'deployment-gate.with.status-context must be exactly GG deployment gate',
 		)
 	})
 
