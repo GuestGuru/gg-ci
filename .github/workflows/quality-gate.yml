@@ -12,9 +12,15 @@ on:
         description: "The caller's required jobs as toJSON(needs)."
         required: true
         type: string
+      status-context:
+        description: "Optional commit status context to publish before the check run closes."
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
+  statuses: write
 
 jobs:
   verify:
@@ -33,7 +39,27 @@ jobs:
       - run: npm ci --ignore-scripts --userconfig=/dev/null
 
       - name: Verify required jobs
+        id: evaluate
+        continue-on-error: true
         env:
           NEEDS_JSON: ${{ inputs.needs-json }}
           NODE_OPTIONS: ""
         run: node node_modules/tsx/dist/cli.mjs src/quality-gate.ts "$NEEDS_JSON"
+
+      - name: Publish deployment status
+        if: ${{ always() && inputs.status-context != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATUS_CONTEXT: ${{ inputs.status-context }}
+          STATUS_STATE: ${{ steps.evaluate.outcome == 'success' && 'success' || 'failure' }}
+          TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          gh api --method POST \
+            "repos/${GITHUB_REPOSITORY}/statuses/${TARGET_SHA}" \
+            -f state="${STATUS_STATE}" \
+            -f context="${STATUS_CONTEXT}" \
+            -f description="GuestGuru production delivery gate"
+
+      - name: Fail when mandatory jobs failed
+        if: ${{ steps.evaluate.outcome != 'success' }}
+        run: exit 1
