@@ -4,6 +4,29 @@ Cross-app CI infrastructure for GuestGuru. **This repository is public** — it 
 generic glue code only. Never add infrastructure identifiers, tokens, or app-specific
 default values here.
 
+## Organization quality gate
+
+`.github/workflows/quality-gate.yml` turns a caller workflow's required job results into
+one stable final check. This lets an organization ruleset and deployment platform depend
+on the same check name even when repositories have different test jobs.
+
+Call it after every mandatory CI job:
+
+```yaml
+quality-gate:
+  name: quality-gate
+  if: ${{ always() }}
+  needs: [lint, test]
+  uses: GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main
+  with:
+    needs-json: ${{ toJSON(needs) }}
+```
+
+`if: always()` is essential: without it GitHub skips the final job when a dependency
+fails, leaving a required check pending instead of reporting a useful failure.
+Every direct dependency must finish with `success`; `failure`, `cancelled`, `skipped`,
+missing results, malformed JSON, and an empty dependency set all fail closed.
+
 ## Neon preview branches
 
 Gives every pull request an isolated, production-forked Neon database that the Vercel
@@ -256,7 +279,7 @@ others. Leave the input unset and nothing changes — only the pooled URI is wri
 
 ### Testing a change to these workflows
 
-The reusable workflows check out the CLI at `github.job_workflow_sha` — the
+The reusable workflows check out the CLI at `job.workflow_sha` — the
 commit the workflow YAML itself came from. Pointing a caller at a branch
 (`neon-preview.yml@my-branch`) therefore runs that branch's CLI too, so a change
 can be validated before it lands on `main`.

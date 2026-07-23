@@ -170,7 +170,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: GuestGuru/gg-ci
-          ref: ${{ github.job_workflow_sha }}
+          ref: ${{ job.workflow_sha }}
       - uses: actions/setup-node@v5
         with:
           node-version: "24"
@@ -207,7 +207,7 @@ ref: main
 to:
 
 ```yaml
-ref: ${{ github.job_workflow_sha }}
+ref: ${{ job.workflow_sha }}
 ```
 
 Document that a caller pinned to a feature ref runs the matching CLI commit, so reusable workflow changes are testable before merge.

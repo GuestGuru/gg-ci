@@ -50,7 +50,7 @@ jobs:
       preview-url: ${{ steps.alias.outputs.preview-url }}
     steps:
       # A CLI-t ABBÓL a commitból töltjük, amelyikből ez a workflow YAML jött.
-      # A `job_workflow_sha` reusable workflow-nál pontosan ezt adja meg.
+      # A `job.workflow_sha` reusable workflow-nál pontosan ezt adja meg.
       #
       # Korábban itt `ref: main` állt: a hívó hiába mutatott egy feature
       # branchre, a CLI mindig a main-ről jött. Egy ott bevezetett új input a
@@ -60,7 +60,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: GuestGuru/gg-ci
-          ref: ${{ github.job_workflow_sha }}
+          ref: ${{ job.workflow_sha }}
 
       - uses: actions/setup-node@v5
         with:
