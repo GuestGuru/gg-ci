@@ -32,7 +32,13 @@ Because GitHub loads it from this repository rather than from the target pull re
 the pull request cannot replace the policy that checks it. The workflow runs
 `src/workflow-policy.ts`, which verifies the exact canonical workflow path, mandatory
 job IDs, `always()` condition, reusable-workflow reference, and `needs-json` input for
-each protected repository.
+each protected repository. It also verifies a SHA-256 inventory of the complete
+`.github/workflows` directory, so a pull request cannot weaken a mandatory job, add a
+lookalike check, or silently change another delivery workflow.
+
+An intentional workflow change is a two-PR operation: first update and merge the
+approved inventory here, then change the target repository to the pre-approved content.
+This keeps the trusted policy update outside the target pull request.
 
 Rollout order matters: merge `gg-ci`, switch every caller from its temporary test ref
 to `@main`, verify all checks, and only then enable the organization ruleset workflow

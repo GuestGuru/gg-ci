@@ -245,11 +245,14 @@ git commit -m "feat(ci): publish reusable quality gate"
 - Create: `.github/workflows/policy-gate.yml`
 - Modify: `package.json`, `package-lock.json`, `.github/actionlint.yaml`
 
-The policy maps each protected repository to one canonical workflow path and exact
-mandatory job list. It rejects missing or extra `needs`, bypassable conditions,
-fabricated `needs-json`, mutable reusable-workflow refs, malformed YAML, and unknown
-repositories. The organization ruleset sources `policy-gate.yml` from `gg-ci`, so a
-target PR cannot replace the validator that checks it.
+The policy maps each protected repository to one canonical workflow path, exact
+mandatory job list, and SHA-256 inventory of every file under `.github/workflows`.
+It rejects missing or extra `needs`, bypassable conditions, fabricated `needs-json`,
+mutable reusable-workflow refs, malformed YAML, unknown repositories, and any added,
+removed, or changed workflow file. The organization ruleset sources `policy-gate.yml`
+from `gg-ci`, so a target PR cannot replace the validator that checks it. Intentional
+workflow changes require the central inventory PR to merge before the pre-approved
+target workflow change.
 
 Validate with:
 

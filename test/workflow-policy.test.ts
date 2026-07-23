@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+	hashWorkflow,
 	policyForRepository,
 	validateWorkflowPolicy,
+	workflowInventoryForRepository,
 } from '../src/workflow-policy.js'
 
 const validSalesWorkflow = `
@@ -20,6 +22,9 @@ jobs:
     with:
       needs-json: \${{ toJSON(needs) }}
 `
+
+const salesInventory =
+	workflowInventoryForRepository('GuestGuru/gg-sales') ?? {}
 
 describe('workflow policy', () => {
 	it('maps every protected repository to its canonical workflow and jobs', () => {
@@ -53,13 +58,19 @@ describe('workflow policy', () => {
 	})
 
 	it('accepts the exact canonical gate', () => {
-		expect(validateWorkflowPolicy('GuestGuru/gg-sales', validSalesWorkflow)).toEqual([])
+		expect(
+			validateWorkflowPolicy(
+				'GuestGuru/gg-sales',
+				validSalesWorkflow,
+				salesInventory,
+			),
+		).toEqual([])
 	})
 
 	it('rejects missing mandatory dependencies', () => {
 		const workflow = validSalesWorkflow.replace('needs: [ci]', 'needs: []')
 
-		expect(validateWorkflowPolicy('GuestGuru/gg-sales', workflow)).toContain(
+		expect(validateWorkflowPolicy('GuestGuru/gg-sales', workflow, salesInventory)).toContain(
 			'quality-gate.needs must be exactly [ci]',
 		)
 	})
@@ -67,7 +78,7 @@ describe('workflow policy', () => {
 	it('rejects dependencies added to fabricate the gate input', () => {
 		const workflow = validSalesWorkflow.replace('needs: [ci]', 'needs: [ci, optional]')
 
-		expect(validateWorkflowPolicy('GuestGuru/gg-sales', workflow)).toContain(
+		expect(validateWorkflowPolicy('GuestGuru/gg-sales', workflow, salesInventory)).toContain(
 			'quality-gate.needs must be exactly [ci]',
 		)
 	})
@@ -78,7 +89,7 @@ describe('workflow policy', () => {
 			'quality-gate.yml@codex/it-244-gg-ci-upgrade',
 		)
 
-		expect(validateWorkflowPolicy('GuestGuru/gg-sales', workflow)).toContain(
+		expect(validateWorkflowPolicy('GuestGuru/gg-sales', workflow, salesInventory)).toContain(
 			'quality-gate.uses must be GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main',
 		)
 	})
@@ -88,7 +99,7 @@ describe('workflow policy', () => {
 			.replace('if: ${{ always() }}', 'if: ${{ success() }}')
 			.replace('needs-json: ${{ toJSON(needs) }}', "needs-json: '{}'")
 
-		expect(validateWorkflowPolicy('GuestGuru/gg-sales', workflow)).toEqual(
+		expect(validateWorkflowPolicy('GuestGuru/gg-sales', workflow, salesInventory)).toEqual(
 			expect.arrayContaining([
 				'quality-gate.if must be exactly ${{ always() }}',
 				'quality-gate.with.needs-json must be exactly ${{ toJSON(needs) }}',
@@ -97,11 +108,40 @@ describe('workflow policy', () => {
 	})
 
 	it('fails closed for unknown repositories and malformed workflows', () => {
-		expect(validateWorkflowPolicy('GuestGuru/unknown', validSalesWorkflow)).toContain(
-			'No workflow policy is configured for GuestGuru/unknown',
-		)
-		expect(validateWorkflowPolicy('GuestGuru/gg-sales', 'jobs: [')).toContain(
-			'Workflow YAML is invalid',
+		expect(
+			validateWorkflowPolicy('GuestGuru/unknown', validSalesWorkflow, {}),
+		).toContain('No workflow policy is configured for GuestGuru/unknown')
+		expect(
+			validateWorkflowPolicy('GuestGuru/gg-sales', 'jobs: [', salesInventory),
+		).toContain('Workflow YAML is invalid')
+	})
+
+	it('rejects changed, added, or removed workflow files', () => {
+		const changed = {
+			...salesInventory,
+			'.github/workflows/ci.yml': hashWorkflow('jobs: { ci: { steps: [] } }'),
+		}
+		const added = {
+			...salesInventory,
+			'.github/workflows/spoof.yml': hashWorkflow('name: quality-gate / verify'),
+		}
+		const missing = { ...salesInventory }
+		delete missing['.github/workflows/preview-alias.yml']
+
+		expect(
+			validateWorkflowPolicy('GuestGuru/gg-sales', validSalesWorkflow, changed),
+		).toContain('Workflow content is not approved: .github/workflows/ci.yml')
+		expect(
+			validateWorkflowPolicy('GuestGuru/gg-sales', validSalesWorkflow, added),
+		).toContain('Unexpected workflow file: .github/workflows/spoof.yml')
+		expect(
+			validateWorkflowPolicy('GuestGuru/gg-sales', validSalesWorkflow, missing),
+		).toContain('Required workflow file is missing: .github/workflows/preview-alias.yml')
+	})
+
+	it('uses stable SHA-256 workflow hashes', () => {
+		expect(hashWorkflow('abc')).toBe(
+			'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
 		)
 	})
 })
