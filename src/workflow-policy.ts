@@ -54,7 +54,7 @@ const policies: Record<string, WorkflowPolicy> = {
 const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	'GuestGuru/gg-ci': {
 		'.github/workflows/ci.yml':
-			'745d5ce278a56ab3804272f4185a0b6d68e185878c1f6c4ea34fae2bdd92f0e3',
+			'408afd0f3be14f53df7a070a4df2c87c7b83dd4b32827ad60ad2c07d0ede439d',
 		'.github/workflows/neon-preview.yml':
 			'e45940c86f1932f5b75d0e9b92849a52994bb1503495ce336f0d1a7625abf37a',
 		'.github/workflows/policy-gate.yml':
