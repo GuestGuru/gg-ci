@@ -170,5 +170,18 @@ jobs:
 				changedTrust,
 			),
 		).toContain('Central trust file is not approved: src/quality-gate.ts')
+
+		const changedManifest = {
+			...centralTrustInventory(),
+			'src/trust-inventory.json': hashWorkflow('{"poisoned":true}'),
+		}
+		expect(
+			validateWorkflowPolicy(
+				'GuestGuru/gg-ci',
+				workflow,
+				workflowInventoryForRepository('GuestGuru/gg-ci') ?? {},
+				changedManifest,
+			),
+		).toContain('Central trust file is not approved: src/trust-inventory.json')
 	})
 })

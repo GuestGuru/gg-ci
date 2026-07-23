@@ -36,7 +36,10 @@ each protected repository. It also verifies a SHA-256 inventory of the complete
 `.github/workflows` directory, so a pull request cannot weaken a mandatory job, add a
 lookalike check, or silently change another delivery workflow. For `gg-ci` itself, the
 policy also hashes the central evaluator and package files listed in
-`src/trust-inventory.json`.
+`src/trust-inventory.json`; the pinned policy independently hashes that manifest too.
+Both policy evaluators run through a direct Node entry point with an empty
+`NODE_OPTIONS`, while dependency installation disables lifecycle scripts. This keeps
+target-repository npm configuration outside the trust path.
 
 An intentional workflow change is a two-PR operation: first update and merge the
 approved inventory here, then change the target repository to the pre-approved content.

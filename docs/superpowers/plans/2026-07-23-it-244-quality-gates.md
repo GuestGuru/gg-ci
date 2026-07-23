@@ -252,7 +252,9 @@ mutable reusable-workflow refs, malformed YAML, unknown repositories, and any ad
 removed, or changed workflow file. The organization ruleset sources `policy-gate.yml`
 from an immutable `gg-ci` commit SHA, so a target PR cannot replace the validator that
 checks it. For `gg-ci`, the pinned validator also checks the evaluator and package trust
-inventory. Intentional workflow changes require the central inventory PR to merge
+inventory plus the manifest's own hash. The evaluator runs through a direct Node entry
+point with lifecycle scripts disabled and `NODE_OPTIONS` cleared. Intentional workflow
+changes require the central inventory PR to merge
 before the pre-approved target workflow change. Central policy releases require an
 explicit ruleset pin to the reviewed candidate SHA and then the resulting main SHA.
 

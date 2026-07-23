@@ -78,7 +78,7 @@ Szabályok:
 - force push és branch törlés legyen tiltva;
 - nyitott review thread mellett ne lehessen merge-elni;
 - általános kötelező approving review ne legyen;
-- a ruleset a `gg-ci/.github/workflows/policy-gate.yml` szervezeti required workflow-ját konkrét, immutable commit SHA-ról futtassa, ne a mozgó `main` refről; a pinelt kód a cél-PR-től függetlenül ellenőrzi a caller workflow pontos bekötését, a teljes `.github/workflows` könyvtár előre jóváhagyott SHA-256 inventoryját, a `gg-ci` esetében pedig a központi evaluator- és package-fájlok trust inventoryját is;
+- a ruleset a `gg-ci/.github/workflows/policy-gate.yml` szervezeti required workflow-ját konkrét, immutable commit SHA-ról futtassa, ne a mozgó `main` refről; a pinelt kód a cél-PR-től függetlenül ellenőrzi a caller workflow pontos bekötését, a teljes `.github/workflows` könyvtár előre jóváhagyott SHA-256 inventoryját, a `gg-ci` esetében pedig a központi evaluator- és package-fájlok, valamint maga a trust manifest hashét is; az evaluator közvetlen Node entry pointtal, semlegesített `NODE_OPTIONS` mellett fusson, ne target által befolyásolható npm scripten át;
 - a gate-et meghatározó workflow- és központi CI-fájlokhoz legyen CODEOWNERS, de egyszemélyes szervezetben ne legyen bekapcsolva a kötelező code-owner review;
 - ne legyen állandó bypass actor.
 

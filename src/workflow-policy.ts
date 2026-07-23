@@ -58,11 +58,11 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/neon-preview.yml':
 			'e45940c86f1932f5b75d0e9b92849a52994bb1503495ce336f0d1a7625abf37a',
 		'.github/workflows/policy-gate.yml':
-			'4a6674c0eea64e68c75f62d1cef5dea49caaf391161c5495d99eea81e92be3d4',
+			'797743c577ca6aa00d87ec1413c0ebec3296ccb2f5abef5ac1db2a14c5c0c0fa',
 		'.github/workflows/preview-alias.yml':
 			'ca031300070019570033a99aa51598163a63813a341ff7c57f7771d190adabf6',
 		'.github/workflows/quality-gate.yml':
-			'b759ccff40b1dd643e0363a185cbe7630718133ea3143def166e68af8b21f858',
+			'3d5c1c79dcca5d52c8c4293cb02a983980217b21418251dd27df879277013b31',
 	},
 	'GuestGuru/gg-sales': {
 		'.github/workflows/ci.yml':
@@ -106,9 +106,14 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 }
 
-const approvedCentralTrustInventory = JSON.parse(
-	readFileSync(new URL('./trust-inventory.json', import.meta.url), 'utf8'),
-) as Record<string, string>
+const centralTrustManifestContent = readFileSync(
+	new URL('./trust-inventory.json', import.meta.url),
+	'utf8',
+)
+const approvedCentralTrustInventory: Record<string, string> = {
+	...(JSON.parse(centralTrustManifestContent) as Record<string, string>),
+	'src/trust-inventory.json': hashWorkflow(centralTrustManifestContent),
+}
 
 type UnknownRecord = Record<string, unknown>
 

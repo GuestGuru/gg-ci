@@ -33,5 +33,7 @@ jobs:
           cache: npm
           cache-dependency-path: .policy/package-lock.json
 
-      - run: npm ci --prefix .policy
-      - run: npm --prefix .policy run workflow-policy -- "$GITHUB_WORKSPACE/target"
+      - run: npm ci --ignore-scripts --prefix .policy --userconfig=/dev/null
+      - run: node .policy/node_modules/tsx/dist/cli.mjs .policy/src/workflow-policy.ts "$GITHUB_WORKSPACE/target"
+        env:
+          NODE_OPTIONS: ""
