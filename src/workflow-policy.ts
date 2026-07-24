@@ -95,6 +95,8 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 			'fdb04ab9bb5073b6547e02fde430442f58d31af9d584823f684f56af45c5a9a0',
 		'.github/workflows/preview-db.yml':
 			'fcac26e8cf681b44a87debe0a126297ddb0082f134c3bb82a241310edc145f74',
+		'.github/workflows/publish-auth.yml':
+			'fab185f32047c2472ee21a72608ad4aa8bad9b52aeebdd4d3abb2d8f271ca9a2',
 		'.github/workflows/token-expiry.yml':
 			'363c7b015d1a2bb4d8284e038e57b281b299f04e1fde12007eb87a0eef10b140',
 	},
