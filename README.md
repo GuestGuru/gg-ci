@@ -48,8 +48,17 @@ job IDs, distinct gate names, `always()` condition, reusable-workflow reference,
 `needs-json` input for each protected repository. It also verifies a SHA-256 inventory of the complete
 `.github/workflows` directory, so a pull request cannot weaken a mandatory job, add a
 lookalike check, or silently change another delivery workflow. For `gg-ci` itself, the
-policy also hashes the central evaluator and package files listed in
-`src/trust-inventory.json`; the pinned policy independently hashes that manifest too.
+policy also verifies its own trusted sources — the central evaluator and package files
+listed in `src/trust-inventory.json`. That check is deliberately **self-consistent**: the
+target's central files are compared against the target's own manifest, not against hashes
+frozen into the trusted evaluator. Comparing to frozen hashes would deadlock every update
+to the trusted sources — including this policy file — because the evaluator runs from
+`main`, so no pull request could ever match `main`'s frozen hash. The self-consistent check
+still guarantees that (1) every path the baseline pins stays declared in the manifest (a
+trusted file cannot be silently dropped) and (2) every declared file matches its declared
+hash, so a changed central file is only accepted when the same PR updates its hash in the
+manifest — visible in the diff. Whether such a change is *authorized* is governed by review
+of the `gg-ci` PR, not by the hash comparison.
 Both policy evaluators run through a direct Node entry point with an empty
 `NODE_OPTIONS`, while dependency installation disables lifecycle scripts. This keeps
 target-repository npm configuration outside the trust path.
