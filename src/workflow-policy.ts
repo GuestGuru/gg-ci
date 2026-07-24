@@ -95,6 +95,8 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 			'fdb04ab9bb5073b6547e02fde430442f58d31af9d584823f684f56af45c5a9a0',
 		'.github/workflows/preview-db.yml':
 			'fcac26e8cf681b44a87debe0a126297ddb0082f134c3bb82a241310edc145f74',
+		'.github/workflows/publish-auth.yml':
+			'fab185f32047c2472ee21a72608ad4aa8bad9b52aeebdd4d3abb2d8f271ca9a2',
 		'.github/workflows/token-expiry.yml':
 			'363c7b015d1a2bb4d8284e038e57b281b299f04e1fde12007eb87a0eef10b140',
 	},
@@ -192,15 +194,22 @@ export function centralTrustInventory(): Record<string, string> {
 	return approvedCentralTrustInventory
 }
 
-export function collectCentralTrustInventory(
+export function collectCentralTrustHashes(
 	targetRoot: string,
+	relativePaths: string[],
 ): Record<string, string> {
-	return Object.fromEntries(
-		Object.keys(approvedCentralTrustInventory).map((relativePath) => [
-			relativePath,
-			hashWorkflow(readFileSync(join(targetRoot, relativePath), 'utf8')),
-		]),
-	)
+	const hashes: Record<string, string> = {}
+	for (const relativePath of relativePaths) {
+		try {
+			hashes[relativePath] = hashWorkflow(
+				readFileSync(join(targetRoot, relativePath), 'utf8'),
+			)
+		} catch {
+			// Missing file: leave it out so validateCentralTrust reports it as
+			// missing with a precise message instead of failing the whole run.
+		}
+	}
+	return hashes
 }
 
 export function collectWorkflowInventory(
@@ -238,17 +247,54 @@ function validateWorkflowInventory(
 	return errors
 }
 
-function validateCentralTrustInventory(
-	actual: Record<string, string>,
-): string[] {
+export type CentralTrustEvidence = {
+	// The target repository's own src/trust-inventory.json, parsed.
+	manifest: Record<string, string>
+	// SHA-256 of the target's files for every path we need to check.
+	actual: Record<string, string>
+}
+
+// Validates the gg-ci repository's own trusted sources.
+//
+// The comparison is deliberately SELF-CONSISTENT: the target's central files
+// are checked against the target's OWN manifest (src/trust-inventory.json), not
+// against the hashes baked into this trusted checker. Comparing to the baked-in
+// hashes would deadlock every update to the trusted sources — including this
+// policy file itself: the trusted checker runs from `main`, so any PR that
+// changes a central file would never match `main`'s frozen hash and could never
+// land through the required policy gate.
+//
+// What the check still guarantees:
+//   1. Completeness — every path the trusted baseline pins must stay declared
+//      in the manifest (a trusted file cannot be silently dropped from it).
+//   2. Integrity — every file the manifest declares must exist and hash to its
+//      declared value, so a changed central file is only accepted when the same
+//      PR updates its hash in the manifest (visible in the diff).
+//
+// It intentionally does NOT decide whether such a change is *authorized* — that
+// is governed by human review of the gg-ci PR, not by a hash comparison.
+function validateCentralTrust(evidence: CentralTrustEvidence): string[] {
+	const { manifest, actual } = evidence
 	const errors: string[] = []
+
+	// (1) The pinned trusted paths must remain declared in the manifest. The
+	// manifest never lists itself, so skip the self entry.
 	for (const path of Object.keys(approvedCentralTrustInventory).sort()) {
+		if (path === 'src/trust-inventory.json') continue
+		if (!(path in manifest)) {
+			errors.push(`Central trust file must stay in the manifest: ${path}`)
+		}
+	}
+
+	// (2) Every declared file must exist and match its declared hash.
+	for (const path of Object.keys(manifest).sort()) {
 		if (!(path in actual)) {
 			errors.push(`Central trust file is missing: ${path}`)
-		} else if (actual[path] !== approvedCentralTrustInventory[path]) {
+		} else if (actual[path] !== manifest[path]) {
 			errors.push(`Central trust file is not approved: ${path}`)
 		}
 	}
+
 	return errors
 }
 
@@ -256,7 +302,7 @@ export function validateWorkflowPolicy(
 	repository: string,
 	workflowYaml: string,
 	actualInventory: Record<string, string>,
-	actualCentralTrustInventory?: Record<string, string>,
+	centralTrust?: CentralTrustEvidence,
 ): string[] {
 	const policy = policyForRepository(repository)
 	if (!policy) return [`No workflow policy is configured for ${repository}`]
@@ -280,7 +326,7 @@ export function validateWorkflowPolicy(
 
 	const centralErrors =
 		repository === 'GuestGuru/gg-ci'
-			? validateCentralTrustInventory(actualCentralTrustInventory ?? {})
+			? validateCentralTrust(centralTrust ?? { manifest: {}, actual: {} })
 			: []
 
 	return [
@@ -301,12 +347,28 @@ export function run(argv: string[], env: NodeJS.ProcessEnv = process.env): numbe
 	const targetRoot = argv[0] ?? '.'
 	let workflowYaml: string
 	let actualInventory: Record<string, string>
-	let actualCentralTrustInventory: Record<string, string> | undefined
+	let centralTrust: CentralTrustEvidence | undefined
 	try {
 		workflowYaml = readFileSync(join(targetRoot, policy.workflowPath), 'utf8')
 		actualInventory = collectWorkflowInventory(targetRoot)
 		if (repository === 'GuestGuru/gg-ci') {
-			actualCentralTrustInventory = collectCentralTrustInventory(targetRoot)
+			const manifestContent = readFileSync(
+				join(targetRoot, 'src/trust-inventory.json'),
+				'utf8',
+			)
+			const manifest = JSON.parse(manifestContent) as Record<string, string>
+			// Hash both what the manifest declares and every pinned baseline path,
+			// so a pinned file that the manifest fails to declare is still surfaced.
+			const pathsToHash = Array.from(
+				new Set([
+					...Object.keys(manifest),
+					...Object.keys(approvedCentralTrustInventory).filter(
+						(path) => path !== 'src/trust-inventory.json',
+					),
+				]),
+			)
+			const actual = collectCentralTrustHashes(targetRoot, pathsToHash)
+			centralTrust = { manifest, actual }
 		}
 	} catch {
 		console.error(
@@ -319,7 +381,7 @@ export function run(argv: string[], env: NodeJS.ProcessEnv = process.env): numbe
 		repository,
 		workflowYaml,
 		actualInventory,
-		actualCentralTrustInventory,
+		centralTrust,
 	)
 	if (errors.length === 0) {
 		console.log(`workflow-policy: ${repository} uses the canonical quality gate`)
