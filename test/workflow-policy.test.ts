@@ -199,42 +199,78 @@ describe('workflow policy', () => {
 		)
 	})
 
-	it('rejects changes to the central trust implementation', () => {
-		const workflow = `
+	describe('central trust (gg-ci self-check)', () => {
+		const ggciWorkflow = `
 jobs:
   test: {}
   quality-gate:
+    name: quality-gate
     if: \${{ always() }}
     needs: [test]
     uses: ./.github/workflows/quality-gate.yml
     with:
       needs-json: \${{ toJSON(needs) }}
 `
-		const changedTrust = {
-			...centralTrustInventory(),
-			'src/quality-gate.ts': hashWorkflow('export const pass = true'),
-		}
+		const ggciInventory = workflowInventoryForRepository('GuestGuru/gg-ci') ?? {}
 
-		expect(
+		// A realistic manifest never lists itself; drop the programmatic self entry.
+		const manifest = { ...centralTrustInventory() }
+		delete manifest['src/trust-inventory.json']
+
+		const validate = (evidence: {
+			manifest: Record<string, string>
+			actual: Record<string, string>
+		}) =>
 			validateWorkflowPolicy(
 				'GuestGuru/gg-ci',
-				workflow,
-				workflowInventoryForRepository('GuestGuru/gg-ci') ?? {},
-				changedTrust,
-			),
-		).toContain('Central trust file is not approved: src/quality-gate.ts')
+				ggciWorkflow,
+				ggciInventory,
+				evidence,
+			)
 
-		const changedManifest = {
-			...centralTrustInventory(),
-			'src/trust-inventory.json': hashWorkflow('{"poisoned":true}'),
-		}
-		expect(
-			validateWorkflowPolicy(
-				'GuestGuru/gg-ci',
-				workflow,
-				workflowInventoryForRepository('GuestGuru/gg-ci') ?? {},
-				changedManifest,
-			),
-		).toContain('Central trust file is not approved: src/trust-inventory.json')
+		it('accepts a self-consistent manifest — every declared file matches', () => {
+			// Files hash to exactly what the manifest declares.
+			expect(validate({ manifest, actual: { ...manifest } })).toEqual([])
+		})
+
+		it('accepts a declared change to a trusted file (updated hash in the manifest)', () => {
+			// A trusted file changed AND its hash was updated in the manifest: the
+			// manifest and the files still agree, so the change is allowed. This is
+			// the case the old baked-in comparison deadlocked.
+			const newHash = hashWorkflow('export const pass = true')
+			const updatedManifest = { ...manifest, 'src/quality-gate.ts': newHash }
+			expect(
+				validate({
+					manifest: updatedManifest,
+					actual: { ...updatedManifest },
+				}),
+			).toEqual([])
+		})
+
+		it('rejects an undeclared change — file hash drifts from the manifest', () => {
+			const actual = {
+				...manifest,
+				'src/quality-gate.ts': hashWorkflow('export const pass = true'),
+			}
+			expect(validate({ manifest, actual })).toContain(
+				'Central trust file is not approved: src/quality-gate.ts',
+			)
+		})
+
+		it('rejects dropping a pinned trusted file from the manifest', () => {
+			const shrunk = { ...manifest }
+			delete shrunk['src/workflow-policy.ts']
+			expect(validate({ manifest: shrunk, actual: { ...shrunk } })).toContain(
+				'Central trust file must stay in the manifest: src/workflow-policy.ts',
+			)
+		})
+
+		it('rejects a declared file that is absent from the tree', () => {
+			const actual = { ...manifest }
+			delete actual['src/quality-gate.ts']
+			expect(validate({ manifest, actual })).toContain(
+				'Central trust file is missing: src/quality-gate.ts',
+			)
+		})
 	})
 })
