@@ -25,6 +25,8 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    # A needs-json kiértékelése + egy commit-status hívás, mért futásidő 8-12 mp (IT-278).
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:

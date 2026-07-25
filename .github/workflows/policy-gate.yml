@@ -14,6 +14,8 @@ jobs:
   workflow-policy:
     name: workflow-policy
     runs-on: ubuntu-latest
+    # Statikus inventory-ellenőrzés, mért futásidő ~12 mp (IT-278).
+    timeout-minutes: 10
     steps:
       - name: Check out target repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5

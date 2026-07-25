@@ -42,8 +42,12 @@ describe('workflow policy', () => {
 			requiredNeeds: ['ci'],
 			uses: 'GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main',
 		})
+		// A `forras` job (lint + typecheck + build) az IT-274-ben került be: a
+		// gg-design addig SEM lintet, SEM typecheckot, SEM buildet nem futtatott,
+		// pedig ez a repo szállítja a komponenseket a másik hét appnak.
 		expect(policyForRepository('GuestGuru/gg-design')?.requiredNeeds).toEqual([
 			'registry',
+			'forras',
 			'meresek',
 		])
 		expect(policyForRepository('GuestGuru/BPDBv2')?.requiredNeeds).toEqual([

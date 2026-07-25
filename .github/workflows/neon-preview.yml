@@ -84,6 +84,8 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
+    # Neon branch-műveletek + Vercel env-írás. A hívók mért mediánja 17-22 mp; a 15 perc a lassú branch-provisioningot is fedi (IT-278).
+    timeout-minutes: 15
     steps:
       # A CLI-t ABBÓL a commitból töltjük, amelyikből ez a workflow YAML jött.
       # A `job.workflow_sha` reusable workflow-nál pontosan ezt adja meg.
