@@ -44,6 +44,11 @@ const policies: Record<string, WorkflowPolicy> = {
 		requiredNeeds: ['web', 'cloud-function'],
 		uses: centralGate,
 	},
+	'GuestGuru/gg-tracker': {
+		workflowPath: '.github/workflows/ci.yml',
+		requiredNeeds: ['build'],
+		uses: centralGate,
+	},
 	'GuestGuru/gg-ci': {
 		workflowPath: '.github/workflows/ci.yml',
 		requiredNeeds: ['test'],
@@ -105,6 +110,14 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 			'58be3ce8c71441817833d6faa2a7acc4def1bc30677a1073b5d235dd288f9ae3',
 		'.github/workflows/preview-alias.yml':
 			'75ce44abc0f143b24aae722b50f90bec6affee473b9089b6613386854a61d3ef',
+	},
+	'GuestGuru/gg-tracker': {
+		'.github/workflows/ci.yml':
+			'98bc1b0904c8c8a2d1f0d8884f07cb35d375a7d16a6732e423995ae8ef2e8f29',
+		'.github/workflows/preview-alias.yml':
+			'e8686b9d4a910c286525829f73689f0c6405d75578e738566f5e8fd2c7e2aa9a',
+		'.github/workflows/preview-db.yml':
+			'042dc2106bdef0cb591946d025e5df81f321aa2097873e6d9f52fc23adfedbbc',
 	},
 }
 
