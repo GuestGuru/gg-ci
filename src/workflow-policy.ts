@@ -91,13 +91,13 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'231f13085da092f698f29f542e8937b87011454c406968c9623988a3bbe52ccb',
 		'.github/workflows/preview-alias.yml':
-			'd198449d88088333d3775d1db6a50bc1d16cf8d3e55a11ae745f9fdaef6038fd',
+			'47a66394a31d5911833f5b0ce6a8b49f8c969a429c61c41229d686956865630f',
 	},
 	'GuestGuru/tools': {
 		'.github/workflows/ci.yml':
 			'fbb66b12181b2c3d5e14b3a8c98f39c194cc101778899094b0d4315cbb7ff9ad',
 		'.github/workflows/preview-alias.yml':
-			'4b3ee37ab36badff7c561d2077bbfcd5ff16a6f2f2b62daab028e36df755ccbf',
+			'9f346dd17dfbefba81d293193c8c23c75d93685753980c09aa2cea33463f3407',
 		'.github/workflows/preview-db.yml':
 			'a59d2f80f7730159cb884f62b76283b29cae7ff8243cc9786d54885227928b7b',
 		'.github/workflows/publish-auth.yml':
