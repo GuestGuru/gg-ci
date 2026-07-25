@@ -46,6 +46,8 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
+    # Egy-két Vercel API-hívás; a cert-kiállítás miatti retry is belefér (IT-278).
+    timeout-minutes: 10
     outputs:
       preview-url: ${{ steps.alias.outputs.preview-url }}
     steps:
