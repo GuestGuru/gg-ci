@@ -1,0 +1,307 @@
+# Reusable workflow: the complete preview-domain flow for a pull request.
+#
+# WHY THIS EXISTS. The caller-side half of the preview flow was copy-pasted into
+# six repositories (~1060 lines) in two diverging families, with different job
+# names for the same steps. That duplication was not theoretical: a stale-guard
+# fix lived in exactly one of the six for three days, and the other five kept
+# reporting false failures in the meantime.
+#
+# This workflow owns everything that is identical across apps — resolving the
+# pull request, resolving the Vercel deployment, deciding whether the deployment
+# is already superseded, attaching the alias, and posting the PR comment. The
+# caller keeps only its own identifiers and whatever is genuinely app-specific
+# (typically a smoke test, which runs different commands in every repository).
+#
+# Every app-specific value is a required input — this repository is PUBLIC and
+# must never contain infrastructure identifiers. Do NOT add default values for
+# them.
+#
+# ⚠️ A note on the PR comment. `preview-alias.yml` deliberately does not comment
+# on pull requests, to keep gg-ci independent of GitHub's PR model. That
+# reasoning does not carry over here: this workflow is triggered BY GitHub's
+# `deployment_status` and `pull_request` events and reads `github.event`, so it
+# is already bound to that model. Keeping the comment in the callers would have
+# preserved the duplication this workflow exists to remove. It is opt-out via
+# the `comment` input.
+name: Preview domain
+
+on:
+  workflow_call:
+    inputs:
+      alias-host-pattern:
+        description: "Alias hostname with a `{pr}` placeholder, e.g. myapp-pr-{pr}.preview.example.com. Bare hostname, not a URL."
+        required: true
+        type: string
+      vercel-project-id:
+        description: "Vercel project ID that owns the deployment and the alias."
+        required: true
+        type: string
+      vercel-team-id:
+        description: "Vercel team (organization) ID that owns the project above."
+        required: true
+        type: string
+      comment:
+        description: "Post (and keep updating) a single PR comment with the preview link."
+        required: false
+        type: boolean
+        default: true
+      comment-note:
+        description: "Extra sentence shown under the preview link in the PR comment."
+        required: false
+        type: string
+        default: ""
+      dry-run:
+        description: "Logs the actions that would be taken without calling the Vercel write APIs."
+        required: false
+        type: boolean
+        default: false
+    outputs:
+      pr-number:
+        description: "Pull request number the deployment belongs to, or empty."
+        value: ${{ jobs.resolve.outputs.pr-number }}
+      preview-url:
+        description: "https://<alias-host>, set once the alias is attached."
+        value: ${{ jobs.alias.outputs.preview-url }}
+      stale:
+        description: "`true` when a newer preview deployment already exists for the same git ref. Tests should skip; the newer deployment's run covers them."
+        value: ${{ jobs.resolve.outputs.stale }}
+      deployment-id:
+        description: "Vercel deployment ID, or empty when this run was skipped."
+        value: ${{ jobs.resolve.outputs.deployment-id }}
+    secrets:
+      VERCEL_TOKEN: { required: true }
+
+permissions:
+  contents: read
+
+jobs:
+  # Resolves everything the rest of the flow needs from ONE Vercel API call.
+  #
+  # The `deployment_status` event carries GitHub's deployment id, not Vercel's,
+  # and its `payload` is empty — so neither the Vercel deployment id nor the pull
+  # request number can be read from the event itself. Both come from the Vercel
+  # API, keyed by the hostname in `target_url`.
+  #
+  # ⚠️ `github.event.deployment.ref` is a COMMIT SHA, not a branch name (measured
+  # 2026-07-19). Any PR lookup based on treating it as a branch silently finds
+  # nothing. `meta.githubPrId` avoids the question entirely: measured
+  # 2026-07-25 on 18 preview deployments across six projects, it was present on
+  # every single one.
+  resolve:
+    if: >-
+      github.event_name == 'deployment_status' &&
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment.environment != 'Production' &&
+      github.event.deployment.environment != 'production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      pr-number: ${{ steps.r.outputs.pr-number }}
+      deployment-id: ${{ steps.r.outputs.deployment-id }}
+      alias-host: ${{ steps.r.outputs.alias-host }}
+      stale: ${{ steps.r.outputs.stale }}
+    steps:
+      - id: r
+        shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ inputs.vercel-project-id }}
+          VERCEL_TEAM_ID: ${{ inputs.vercel-team-id }}
+          ALIAS_HOST_PATTERN: ${{ inputs.alias-host-pattern }}
+          # Untrusted input: env only, never interpolated into the shell.
+          TARGET_URL: ${{ github.event.deployment_status.target_url }}
+        run: |
+          set -o pipefail
+
+          host=${TARGET_URL#https://}; host=${host%%/*}
+
+          # `-f` would swallow the body on a 4xx; we want to distinguish "not our
+          # project" from a real outage, so read the body and check the fields.
+          dep=$(curl -s "https://api.vercel.com/v13/deployments/${host}?teamId=${VERCEL_TEAM_ID}" \
+                  -H "Authorization: Bearer $VERCEL_TOKEN")
+
+          id=$(printf '%s' "$dep" | jq -r '.id // empty')
+          pr=$(printf '%s' "$dep" | jq -r '.meta.githubPrId // empty')
+          ref=$(printf '%s' "$dep" | jq -r '.meta.githubCommitRef // empty')
+
+          # Not an error: a repository can be linked to more than one Vercel
+          # project, and a deployment outside this team's scope is invisible to
+          # this token. Skipping quietly beats a red X on every such run.
+          if [[ -z "$id" ]]; then
+            echo "::notice::$host is not a deployment this token can see — skipping."
+            exit 0
+          fi
+
+          # Direct branch pushes produce previews with no pull request. There is
+          # nobody to link, so there is nothing to do.
+          if [[ -z "$pr" ]]; then
+            echo "::notice::$host does not belong to a pull request — skipping."
+            exit 0
+          fi
+
+          echo "deployment-id=$id" >> "$GITHUB_OUTPUT"
+          echo "pr-number=$pr" >> "$GITHUB_OUTPUT"
+          echo "alias-host=${ALIAS_HOST_PATTERN//\{pr\}/$pr}" >> "$GITHUB_OUTPUT"
+
+          # IS THIS DEPLOYMENT ALREADY SUPERSEDED?
+          #
+          # A pull request can produce several deployments for the same git ref —
+          # a new push, a redeploy after preview-database provisioning, a retry.
+          # `deployment_status` fires for each of them, so a test run started by
+          # an older deployment measures an instance that no longer matters.
+          #
+          # The commit SHA cannot distinguish them (a redeploy targets the SAME
+          # commit) and retrying does not help (the old lambda keeps its old
+          # environment permanently). Recency can: if a newer preview deployment
+          # exists for this git ref, this run is stale.
+          latest=""
+          if [[ -n "$ref" ]]; then
+            latest=$(curl -s \
+              "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_TEAM_ID}&target=preview&limit=1&meta-githubCommitRef=${ref}" \
+              -H "Authorization: Bearer $VERCEL_TOKEN" | jq -r '.deployments[0].uid // empty')
+          fi
+
+          # Undecidable (API error, missing ref) means NOT stale. A redundant test
+          # run is cheap; a false green is not.
+          if [[ -n "$latest" && "$latest" != "$id" ]]; then
+            echo "::notice::Stale deployment ($id); $latest is newer and will run this again. Tests skip."
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  alias:
+    needs: resolve
+    if: needs.resolve.outputs.deployment-id != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      preview-url: ${{ steps.alias.outputs.preview-url }}
+    steps:
+      # The CLI comes from the SAME commit this workflow YAML came from.
+      # `job.workflow_sha` is exactly that for a reusable workflow.
+      #
+      # This used to say `ref: main`: a caller pointing at a feature branch still
+      # got main's CLI, which silently ignored any input the branch had added —
+      # the run went green and did nothing (measured while onboarding
+      # GuestGuru/tools, 2026-07-19).
+      - uses: actions/checkout@v5
+        with:
+          repository: GuestGuru/gg-ci
+          ref: ${{ job.workflow_sha }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Attach alias
+        id: alias
+        shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          ALIAS_HOST: ${{ needs.resolve.outputs.alias-host }}
+          DEPLOYMENT_ID: ${{ needs.resolve.outputs.deployment-id }}
+          VERCEL_PROJECT_ID: ${{ inputs.vercel-project-id }}
+          VERCEL_TEAM_ID: ${{ inputs.vercel-team-id }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          set -o pipefail
+
+          args=(
+            --alias-host="$ALIAS_HOST"
+            --deployment-id="$DEPLOYMENT_ID"
+            --vercel-project-id="$VERCEL_PROJECT_ID"
+            --vercel-team-id="$VERCEL_TEAM_ID"
+          )
+          [[ "$DRY_RUN" == "true" ]] && args+=(--dry-run)
+
+          npm run gg-ci -- alias-set "${args[@]}" | tee cli-output.log
+
+          # The CLI prints `preview-url=<url>` on its own line; anchoring the
+          # match keeps npm's banner lines out.
+          url="$(grep -m1 '^preview-url=' cli-output.log | cut -d= -f2- || true)"
+          [[ -n "$url" ]] && echo "preview-url=$url" >> "$GITHUB_OUTPUT"
+
+  comment:
+    needs: [resolve, alias]
+    if: inputs.comment && needs.alias.outputs.preview-url != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # ONE comment per pull request, updated in place — otherwise every push
+      # leaves another one behind. The marker is an HTML comment so it is
+      # invisible in the rendered body but findable in the raw text.
+      #
+      # Deliberately not `gh pr comment --edit-last`: that edits the last comment
+      # by the actor whatever it is, so an unrelated bot comment in between gets
+      # overwritten. Matching on our own marker cannot do that.
+      - shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ needs.resolve.outputs.pr-number }}
+          URL: ${{ needs.alias.outputs.preview-url }}
+          NOTE: ${{ inputs.comment-note }}
+        run: |
+          set -o pipefail
+
+          body=$(printf '### 🔍 Preview\n\n**%s**\n\n%s\n\n<!-- gg-preview-link -->' "$URL" "$NOTE")
+
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+                --jq '.[] | select(.body | contains("<!-- gg-preview-link -->")) | .id' | head -1)
+
+          if [[ -n "$id" ]]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body" >/dev/null
+            echo "Updated comment: $URL"
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body" >/dev/null
+            echo "Created comment: $URL"
+          fi
+
+  # Detaching the DOMAIN matters, not just the alias: a domain attached to a
+  # project without a git-branch binding is served from the latest PRODUCTION
+  # deployment when nobody else claims it. Removing only the alias would make a
+  # closed PR's link return 200 with the LIVE site — worse than a 404, because it
+  # looks like it is still showing the pull request.
+  unalias:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          repository: GuestGuru/gg-ci
+          ref: ${{ job.workflow_sha }}
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Detach alias
+        shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          ALIAS_HOST_PATTERN: ${{ inputs.alias-host-pattern }}
+          PR: ${{ github.event.pull_request.number }}
+          VERCEL_PROJECT_ID: ${{ inputs.vercel-project-id }}
+          VERCEL_TEAM_ID: ${{ inputs.vercel-team-id }}
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          set -o pipefail
+
+          args=(
+            --alias-host="${ALIAS_HOST_PATTERN//\{pr\}/$PR}"
+            --vercel-project-id="$VERCEL_PROJECT_ID"
+            --vercel-team-id="$VERCEL_TEAM_ID"
+          )
+          [[ "$DRY_RUN" == "true" ]] && args+=(--dry-run)
+
+          npm run gg-ci -- alias-remove "${args[@]}"
