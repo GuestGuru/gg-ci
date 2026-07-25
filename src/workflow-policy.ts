@@ -66,14 +66,16 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 			'e5e19e5e68c2ed229f391c148f5f8c3676f494106e2c1c6bc85ba6241bf51972',
 		'.github/workflows/preview-alias.yml':
 			'32bff2300d444bfde9c44ddf0b2483e0d371c1bdf782a35a100ba50eeab11d6f',
+		'.github/workflows/preview.yml':
+			'b6da564fa19f8d32ad98be45561a3f423ba7cd56b0d45fbd8d587e75fd85fd27',
 		'.github/workflows/quality-gate.yml':
 			'320459bacf57f314cc2ebaf10f90570b403224a43d1c440d6175149199abbcd7',
 	},
 	'GuestGuru/gg-sales': {
 		'.github/workflows/ci.yml':
-			'efd1e865e2526601d9d8d5c4cae148195a4f1fb84dd7d899e4d3451f32e96bef',
+			'6a71d52a1597762221e09e0c51598a3f5819127c80e2bde081166bea630ae61e',
 		'.github/workflows/preview-alias.yml':
-			'79c81c3ec9de02056b86d2ae99e3d5bfddaa5de877c239ae84df2a75b491b8e5',
+			'29b1443821e140721ece0a369b7ca67503f2f9d8a6a7441988cce1a74c0ca85d',
 	},
 	'GuestGuru/gg-design': {
 		'.github/workflows/registry.yml':
@@ -81,23 +83,23 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/BPDBv2': {
 		'.github/workflows/ci.yml':
-			'f82af0d3aaebe081213c3563daffd6fb1a64202c0a02f5be962577fb75ab11ee',
+			'004bf9e7481463a20c886f202f912ba0ed4e7bddc1b2a46a05a180d1901d90ff',
 		'.github/workflows/preview-alias.yml':
-			'f243a2af63e6946756ed1ba952ac653686e50a84b422aeab7263d5b5f2dbc640',
+			'4dab7eb1b102af2f0807c4e888cf6f2cc4886c6e43fb5dcb47c4fbf90eeee24d',
 		'.github/workflows/preview-db.yml':
 			'59834e9e0f337cffe570cd58eaea22a8f17145d59c36692076e54135be5e4090',
 	},
 	'GuestGuru/gg-agents': {
 		'.github/workflows/ci.yml':
-			'231f13085da092f698f29f542e8937b87011454c406968c9623988a3bbe52ccb',
+			'89f72fef65ff461b80cb2a67c5b9f7a2343409dd47fe43aad83c5dfba6a00197',
 		'.github/workflows/preview-alias.yml':
-			'47a66394a31d5911833f5b0ce6a8b49f8c969a429c61c41229d686956865630f',
+			'6300f44c1412c19c38d139df6c15da72e2936da426457c110222e797529045a4',
 	},
 	'GuestGuru/tools': {
 		'.github/workflows/ci.yml':
 			'fbb66b12181b2c3d5e14b3a8c98f39c194cc101778899094b0d4315cbb7ff9ad',
 		'.github/workflows/preview-alias.yml':
-			'9f346dd17dfbefba81d293193c8c23c75d93685753980c09aa2cea33463f3407',
+			'67194fb6ff02a566e4c073aa29aa874ad9251dd9344c8c4473e9d22e93027bb3',
 		'.github/workflows/preview-db.yml':
 			'a59d2f80f7730159cb884f62b76283b29cae7ff8243cc9786d54885227928b7b',
 		'.github/workflows/publish-auth.yml':
@@ -107,15 +109,15 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/irnok': {
 		'.github/workflows/ci.yml':
-			'8c690f1d57115e60d80c503c5a598fcdfab539cbc787b8d882660051b44abba0',
+			'ba07145cb977be1427a8e7680fb9aab8fd3373b38cb64ba9d2c0697d99920453',
 		'.github/workflows/preview-alias.yml':
-			'6b6aac281e51f6c00556c29c21579c12abe251f5f566389c1f1ca9fccd306bf5',
+			'd5cbdc7f070ebd3db407a0284951bb5d4ec6e3c42613320f413f281e1805b7ce',
 	},
 	'GuestGuru/gg-tracker': {
 		'.github/workflows/ci.yml':
 			'd68d2ab2f7da18f86807bebe6d5518938d66db87eefcaf1a054df3dbe5646b54',
 		'.github/workflows/preview-alias.yml':
-			'9996ae343d9733ef5f99f614d7b75a291b3414d613dcff6a8cdf7db4ed71b8fb',
+			'f7e8e38e6d80ffdecebc6b27740571f169d811bd5a49b73030d20aac57f27e56',
 		'.github/workflows/preview-db.yml':
 			'a87ea43503eff61918229acca1e73faec3fd6354e70c91fe4eb0080c9caf42d8',
 	},
