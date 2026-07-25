@@ -83,9 +83,9 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/BPDBv2': {
 		'.github/workflows/ci.yml':
-			'9a4b478b74fdee8de9193dc7590917d6bc81b1f5ca5a7328dd34c1504c88ba57',
+			'1358b03ff4d567766a4d3a6ba95696a52c8e793514019940095f8b96e31dd29b',
 		'.github/workflows/preview-alias.yml':
-			'4dab7eb1b102af2f0807c4e888cf6f2cc4886c6e43fb5dcb47c4fbf90eeee24d',
+			'b76ed68f29b68d343863acba9e53a38e7c27a50709db33a698b6bcf6249f68c6',
 		'.github/workflows/preview-db.yml':
 			'59834e9e0f337cffe570cd58eaea22a8f17145d59c36692076e54135be5e4090',
 	},
