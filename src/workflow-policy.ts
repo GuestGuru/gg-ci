@@ -85,7 +85,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'1358b03ff4d567766a4d3a6ba95696a52c8e793514019940095f8b96e31dd29b',
 		'.github/workflows/preview-alias.yml':
-			'b76ed68f29b68d343863acba9e53a38e7c27a50709db33a698b6bcf6249f68c6',
+			'635b6c5093168220ecfa28b91ec1f1bbf24946acd76fce7784bf9600b0a478db',
 		'.github/workflows/preview-db.yml':
 			'59834e9e0f337cffe570cd58eaea22a8f17145d59c36692076e54135be5e4090',
 	},
