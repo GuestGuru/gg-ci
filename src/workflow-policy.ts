@@ -59,31 +59,31 @@ const policies: Record<string, WorkflowPolicy> = {
 const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	'GuestGuru/gg-ci': {
 		'.github/workflows/ci.yml':
-			'0b9fa5ed529156ada2cdd7d15d3d726d25e62b632ac768ad402cd806381caeb2',
+			'3fc6c8a4df55f972e91821f511e3716d78d9517cf4da28d5e37cec6d0e504001',
 		'.github/workflows/neon-preview.yml':
-			'0381be4d6510f4e596188b30fe891ef107ab945463377ec7e56c56468b88c353',
+			'f259b356c74c2f89a7d70206dbb2eb6b36fa79c0bf841d6b735e56c01309e7d2',
 		'.github/workflows/policy-gate.yml':
 			'e5e19e5e68c2ed229f391c148f5f8c3676f494106e2c1c6bc85ba6241bf51972',
 		'.github/workflows/preview-alias.yml':
-			'32bff2300d444bfde9c44ddf0b2483e0d371c1bdf782a35a100ba50eeab11d6f',
+			'b1028f339db194a7211a3838bd6e3748d7e690009c108bd8227c02cbce87c61e',
 		'.github/workflows/preview.yml':
-			'b6da564fa19f8d32ad98be45561a3f423ba7cd56b0d45fbd8d587e75fd85fd27',
+			'ad03f5ff525c4b65f30befb34f4da345697582646e81ad6155a013c8ae8682b9',
 		'.github/workflows/quality-gate.yml':
 			'320459bacf57f314cc2ebaf10f90570b403224a43d1c440d6175149199abbcd7',
 	},
 	'GuestGuru/gg-sales': {
 		'.github/workflows/ci.yml':
-			'6a71d52a1597762221e09e0c51598a3f5819127c80e2bde081166bea630ae61e',
+			'1f32c1a2cfdf71872d0d634d69e02f1a11086d95ff0fad948dba7a669d725767',
 		'.github/workflows/preview-alias.yml':
 			'29b1443821e140721ece0a369b7ca67503f2f9d8a6a7441988cce1a74c0ca85d',
 	},
 	'GuestGuru/gg-design': {
 		'.github/workflows/registry.yml':
-			'd0a03801195fe3bdfdf9a50ecaf6f1a3553e5ac4b30a9132514920a701cf5153',
+			'ba1df9639fb4e9ce3bbbabc2df225c9fef65bfaf6592be11d2226ee4d3551837',
 	},
 	'GuestGuru/BPDBv2': {
 		'.github/workflows/ci.yml':
-			'004bf9e7481463a20c886f202f912ba0ed4e7bddc1b2a46a05a180d1901d90ff',
+			'9a4b478b74fdee8de9193dc7590917d6bc81b1f5ca5a7328dd34c1504c88ba57',
 		'.github/workflows/preview-alias.yml':
 			'4dab7eb1b102af2f0807c4e888cf6f2cc4886c6e43fb5dcb47c4fbf90eeee24d',
 		'.github/workflows/preview-db.yml':
@@ -91,25 +91,25 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/gg-agents': {
 		'.github/workflows/ci.yml':
-			'89f72fef65ff461b80cb2a67c5b9f7a2343409dd47fe43aad83c5dfba6a00197',
+			'8db35ede20d5e3b5587d6c23099c2da8d41a11253a5bd5c1405240e37e345a49',
 		'.github/workflows/preview-alias.yml':
-			'6300f44c1412c19c38d139df6c15da72e2936da426457c110222e797529045a4',
+			'cd336cb295215b54ba08b80a210458483e6a9a1e84bbd3dc3999dd425ffada09',
 	},
 	'GuestGuru/tools': {
 		'.github/workflows/ci.yml':
-			'fbb66b12181b2c3d5e14b3a8c98f39c194cc101778899094b0d4315cbb7ff9ad',
+			'381e78653325913a817e3fb6cc63640d4a37a04baaa224839d6b9e80d07ce32b',
 		'.github/workflows/preview-alias.yml':
-			'67194fb6ff02a566e4c073aa29aa874ad9251dd9344c8c4473e9d22e93027bb3',
+			'44f35219ced1e6bf9dc82d99212de8694845133cd89c490fa46b244a5575d2c1',
 		'.github/workflows/preview-db.yml':
 			'a59d2f80f7730159cb884f62b76283b29cae7ff8243cc9786d54885227928b7b',
 		'.github/workflows/publish-auth.yml':
-			'cd47f472cc1bd29fb1622a07de6e7e3d5431470b86b79d547066bc1f44c86b0e',
+			'7e6bc79345253c92b1454315d1530abe7a516e7ef895bdbdfc676e7cc057eedc',
 		'.github/workflows/token-expiry.yml':
-			'1a51b0cbda1a520dbdaed0f1cbf56dde1508412bf3a4c694542cc9dd2cd88731',
+			'1195c868da3590b4dd0516c88b27919a0114f81374d0dae9ed63a9da5b73fb68',
 	},
 	'GuestGuru/irnok': {
 		'.github/workflows/ci.yml':
-			'ba07145cb977be1427a8e7680fb9aab8fd3373b38cb64ba9d2c0697d99920453',
+			'd3e9aeb993a60bb766015df823d81e7435436066953e8557d5cb47fa36507b32',
 		'.github/workflows/preview-alias.yml':
 			'd5cbdc7f070ebd3db407a0284951bb5d4ec6e3c42613320f413f281e1805b7ce',
 		'.github/workflows/preview-db.yml':
@@ -117,7 +117,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/gg-tracker': {
 		'.github/workflows/ci.yml':
-			'd68d2ab2f7da18f86807bebe6d5518938d66db87eefcaf1a054df3dbe5646b54',
+			'bf9be761721878954e25cb6fbb753a41bb8251923bf0134587c4e47ad68894c5',
 		'.github/workflows/preview-alias.yml':
 			'f7e8e38e6d80ffdecebc6b27740571f169d811bd5a49b73030d20aac57f27e56',
 		'.github/workflows/preview-db.yml':
