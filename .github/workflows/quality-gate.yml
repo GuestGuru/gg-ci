@@ -55,12 +55,23 @@ jobs:
           STATUS_CONTEXT: ${{ inputs.status-context }}
           STATUS_STATE: ${{ steps.evaluate.outcome == 'success' && 'success' || 'failure' }}
           TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          # Standby switch (IT-295): an org-level Actions variable whose VALUE is
+          # an expiry date (YYYY-MM-DD, UTC). While today is before that date the
+          # callers' guards skip the expensive CI steps, so a green gate did not
+          # measure anything — the status description must say so out loud.
+          # In a reusable workflow `vars` resolves against the caller's
+          # repository/organization, so the org variable is visible here.
+          STANDBY: ${{ vars.GG_CI_STANDBY }}
         run: |
+          desc="GuestGuru production delivery gate"
+          if [[ "$STANDBY" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && [[ "$(date -u +%F)" < "$STANDBY" ]]; then
+            desc="⚠️ STANDBY (until ${STANDBY}) — checks were skipped, this green is unmeasured"
+          fi
           gh api --method POST \
             "repos/${GITHUB_REPOSITORY}/statuses/${TARGET_SHA}" \
             -f state="${STATUS_STATE}" \
             -f context="${STATUS_CONTEXT}" \
-            -f description="GuestGuru production delivery gate"
+            -f description="${desc}"
 
       - name: Fail when mandatory jobs failed
         if: ${{ steps.evaluate.outcome != 'success' }}

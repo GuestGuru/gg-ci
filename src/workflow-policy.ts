@@ -8,6 +8,12 @@ export type WorkflowPolicy = {
 	workflowPath: string
 	requiredNeeds: string[]
 	uses: string
+	// The commit status the single quality-gate call must publish (IT-295).
+	// Absent for gg-ci, which deploys nothing. Before IT-295 a separate
+	// deployment-gate job ran the SAME evaluation on a second VM just to
+	// publish this status — with per-job minute-rounded billing that was one
+	// wasted minute on every CI run in every repository.
+	statusContext?: string
 }
 
 const centralGate =
@@ -18,36 +24,43 @@ const policies: Record<string, WorkflowPolicy> = {
 		workflowPath: '.github/workflows/ci.yml',
 		requiredNeeds: ['ci'],
 		uses: centralGate,
+		statusContext: 'GG deployment gate',
 	},
 	'GuestGuru/gg-design': {
 		workflowPath: '.github/workflows/registry.yml',
 		requiredNeeds: ['registry', 'forras', 'meresek'],
 		uses: centralGate,
+		statusContext: 'GG deployment gate',
 	},
 	'GuestGuru/BPDBv2': {
 		workflowPath: '.github/workflows/ci.yml',
 		requiredNeeds: ['web', 'pipeline'],
 		uses: centralGate,
+		statusContext: 'GG deployment gate',
 	},
 	'GuestGuru/gg-agents': {
 		workflowPath: '.github/workflows/ci.yml',
 		requiredNeeds: ['ci', 'integration'],
 		uses: centralGate,
+		statusContext: 'GG deployment gate',
 	},
 	'GuestGuru/tools': {
 		workflowPath: '.github/workflows/ci.yml',
 		requiredNeeds: ['ci'],
 		uses: centralGate,
+		statusContext: 'GG deployment gate',
 	},
 	'GuestGuru/irnok': {
 		workflowPath: '.github/workflows/ci.yml',
 		requiredNeeds: ['web', 'cloud-function'],
 		uses: centralGate,
+		statusContext: 'GG deployment gate',
 	},
 	'GuestGuru/gg-tracker': {
 		workflowPath: '.github/workflows/ci.yml',
 		requiredNeeds: ['build'],
 		uses: centralGate,
+		statusContext: 'GG deployment gate',
 	},
 	'GuestGuru/gg-ci': {
 		workflowPath: '.github/workflows/ci.yml',
@@ -67,41 +80,41 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/preview-alias.yml':
 			'b1028f339db194a7211a3838bd6e3748d7e690009c108bd8227c02cbce87c61e',
 		'.github/workflows/preview.yml':
-			'ad03f5ff525c4b65f30befb34f4da345697582646e81ad6155a013c8ae8682b9',
+			'72335f79b96f7f76a49d59807266889c8f90c1c98b9e64933151af7d8f2e120b',
 		'.github/workflows/quality-gate.yml':
-			'320459bacf57f314cc2ebaf10f90570b403224a43d1c440d6175149199abbcd7',
+			'7c2034e1d46ebcf6f3e80a5cffd5dd68f4f274803ecc301b94354721017bc160',
 	},
 	'GuestGuru/gg-sales': {
 		'.github/workflows/ci.yml':
-			'dfe154b9b4b123935331627e5e1797ed3ae0b2d849583222df8d0c3afe228e17',
+			'15f199bf5bc56dbf8966f10f521b9e47de563e7f478b4772b387ca601b4f2d97',
 		'.github/workflows/preview-alias.yml':
 			'29b1443821e140721ece0a369b7ca67503f2f9d8a6a7441988cce1a74c0ca85d',
 	},
 	'GuestGuru/gg-design': {
 		'.github/workflows/registry.yml':
-			'ba1df9639fb4e9ce3bbbabc2df225c9fef65bfaf6592be11d2226ee4d3551837',
+			'a4621e2d63ceb3d59b110b47f87aaee9d2641e65febd6477c0ab3dbc76cda2b4',
 	},
 	'GuestGuru/BPDBv2': {
 		'.github/workflows/ci.yml':
-			'21345a39f1dc25de0daff18f065ce1f4abb6d3a487c7bfa50b456b41a260ce89',
+			'bd7231891ccabf578d354545e3bee455c05dcec731512a83d893bc15746b348d',
 		'.github/workflows/preview-alias.yml':
-			'34e8562baf906f0b00d489c086193db2170cb8a71424b412d0300a04f99820f9',
+			'e3547548c88d27da6afe7b72b0554852962e7a1192121a276be44224e474dc34',
 		'.github/workflows/preview-db.yml':
-			'59834e9e0f337cffe570cd58eaea22a8f17145d59c36692076e54135be5e4090',
+			'a54d0977fc5dd2309d921987b5bda620f54d415e429855d8dba6a617f1645326',
 	},
 	'GuestGuru/gg-agents': {
 		'.github/workflows/ci.yml':
-			'671546aabe532cbf61aee2a8409437337cbe0a3789b7843348ca2ca174548adb',
+			'2dd70890e23b76bd4ad65684d6ef0b971d9ac440a8060a91becedb83e42a5d4f',
 		'.github/workflows/preview-alias.yml':
-			'0ce5c0748747735b5d9edb75fd877387def8dd32627cf601005557286e2a7bd1',
+			'082f4fbf6f4d4a064d824afe6e69b1ab4ad418f7d43bfc07f156f5cf4fa08bca',
 	},
 	'GuestGuru/tools': {
 		'.github/workflows/ci.yml':
-			'31dd9183cbaf963709314a508e32ef38c5da0c2a934b095860d7a2bd043d7c9d',
+			'7cf0127957915ca2e2f39bbdb78f6fedeaf5d3a76cfa73e8e0627e5f65952ae4',
 		'.github/workflows/preview-alias.yml':
-			'5929b511ff209f5da971b2d54740c083df93e9e9bdc1810e568c5f1f9e4ea50a',
+			'be8b3e7f7f145918e452466d5133320600a1421dd9aecfce322bc38b2058bedd',
 		'.github/workflows/preview-db.yml':
-			'a59d2f80f7730159cb884f62b76283b29cae7ff8243cc9786d54885227928b7b',
+			'993326888ae69ac03f42f7493c7446c2206a5ebb150c5198ca8051f9bf31e07f',
 		'.github/workflows/publish-auth.yml':
 			'7e6bc79345253c92b1454315d1530abe7a516e7ef895bdbdfc676e7cc057eedc',
 		'.github/workflows/token-expiry.yml':
@@ -109,19 +122,19 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/irnok': {
 		'.github/workflows/ci.yml':
-			'7365de51addf954b464ba17907abf24e0fba7f71fae428dbbb842aab0be902dd',
+			'ac81090e10632d101829ca3ff10058bf5ce4451031d178b5fd2678601e984f83',
 		'.github/workflows/preview-alias.yml':
 			'd5cbdc7f070ebd3db407a0284951bb5d4ec6e3c42613320f413f281e1805b7ce',
 		'.github/workflows/preview-db.yml':
-			'7e7ff939db4ef85f2bc29e0dfe677ba0ac61075e7a7de8460957bacc06e266c1',
+			'd2de948bd8611ad452d397412e533f85e183bdc5dc0ad95488c2dcf6936b53e3',
 	},
 	'GuestGuru/gg-tracker': {
 		'.github/workflows/ci.yml':
-			'b8e12afc6b9eba4c68e1d94baa8163c358821485701c78f32abe6c90853a84d3',
+			'9b6f11d17c710654747d405823f5209ebe2ffa1854ba0cf2a49007dc657ea355',
 		'.github/workflows/preview-alias.yml':
 			'f7e8e38e6d80ffdecebc6b27740571f169d811bd5a49b73030d20aac57f27e56',
 		'.github/workflows/preview-db.yml':
-			'a87ea43503eff61918229acca1e73faec3fd6354e70c91fe4eb0080c9caf42d8',
+			'5ce68336d44583d84b9389e7565ad6b68456755dbb451b4e1d686ccdb230ebca',
 	},
 }
 
@@ -141,11 +154,16 @@ function asRecord(value: unknown): UnknownRecord | undefined {
 	return value as UnknownRecord
 }
 
+// Validates the single quality-gate job (IT-295). The gate both closes the
+// merge path (its check run is the ruleset-required `quality-gate / verify`)
+// and — where the policy declares a statusContext — publishes the commit
+// status the Vercel production Deployment Check waits for. One evaluation,
+// one job, one billable minute.
 function validateGate(
 	jobs: UnknownRecord | undefined,
-	gateName: 'quality-gate' | 'deployment-gate',
 	policy: WorkflowPolicy,
 ): string[] {
+	const gateName = 'quality-gate'
 	const gate = asRecord(jobs?.[gateName])
 	if (!gate) return [`Workflow must define a ${gateName} job`]
 
@@ -175,19 +193,13 @@ function validateGate(
 			`${gateName}.with.needs-json must be exactly \${{ toJSON(needs) }}`,
 		)
 	}
-	if (
-		gateName === 'deployment-gate' &&
-		inputs?.['status-context'] !== 'GG deployment gate'
-	) {
-		errors.push(
-			'deployment-gate.with.status-context must be exactly GG deployment gate',
-		)
-	}
-	if (
-		gateName === 'quality-gate' &&
-		inputs &&
-		'status-context' in inputs
-	) {
+	if (policy.statusContext) {
+		if (inputs?.['status-context'] !== policy.statusContext) {
+			errors.push(
+				`quality-gate.with.status-context must be exactly ${policy.statusContext}`,
+			)
+		}
+	} else if (inputs && 'status-context' in inputs) {
 		errors.push('quality-gate.with.status-context must be omitted')
 	}
 	return errors
@@ -336,9 +348,14 @@ export function validateWorkflowPolicy(
 	}
 
 	const jobs = asRecord(asRecord(workflow)?.jobs)
-	const errors = validateGate(jobs, 'quality-gate', policy)
-	if (repository !== 'GuestGuru/gg-ci') {
-		errors.push(...validateGate(jobs, 'deployment-gate', policy))
+	const errors = validateGate(jobs, policy)
+	// IT-295: the deployment-gate job merged into quality-gate. A leftover copy
+	// would run the same evaluation on a second VM — exactly the billing waste
+	// the merge removed — so its presence is an error, not a tolerated no-op.
+	if (jobs && 'deployment-gate' in jobs) {
+		errors.push(
+			'deployment-gate job must be removed — quality-gate publishes the GG deployment gate status (IT-295)',
+		)
 	}
 
 	const centralErrors =
