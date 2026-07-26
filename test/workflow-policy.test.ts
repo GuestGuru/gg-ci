@@ -7,6 +7,10 @@ import {
 	workflowInventoryForRepository,
 } from '../src/workflow-policy.js'
 
+// IT-295 óta EGY gate-hívás van: a quality-gate maga publikálja a
+// `GG deployment gate` commit statust. A külön deployment-gate job ugyanazt a
+// kiértékelést futtatta még egyszer, egy második VM-en — a jobonkénti percre
+// kerekített számlázás mellett ez futásonként 1 elpazarolt perc volt.
 const validSalesWorkflow = `
 name: CI
 on: pull_request
@@ -17,13 +21,6 @@ jobs:
       - run: npm test
   quality-gate:
     name: quality-gate
-    if: \${{ always() }}
-    needs: [ci]
-    uses: GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main
-    with:
-      needs-json: \${{ toJSON(needs) }}
-  deployment-gate:
-    name: deployment-gate
     if: \${{ always() }}
     needs: [ci]
     uses: GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main
@@ -41,6 +38,7 @@ describe('workflow policy', () => {
 			workflowPath: '.github/workflows/ci.yml',
 			requiredNeeds: ['ci'],
 			uses: 'GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main',
+			statusContext: 'GG deployment gate',
 		})
 		// A `forras` job (lint + typecheck + build) az IT-274-ben került be: a
 		// gg-design addig SEM lintet, SEM typecheckot, SEM buildet nem futtatott,
@@ -88,30 +86,27 @@ describe('workflow policy', () => {
 		)
 	})
 
-	it('requires a distinct Vercel deployment gate with the same dependencies', () => {
-		const missing = validSalesWorkflow.replace(
-			/  deployment-gate:[\s\S]*$/,
-			'',
-		)
-		const weakened = validSalesWorkflow.replace(
-			'  deployment-gate:\n    name: deployment-gate\n    if: ${{ always() }}\n    needs: [ci]',
-			'  deployment-gate:\n    name: deployment-gate\n    if: ${{ success() }}\n    needs: []',
-		)
+	it('rejects a leftover deployment-gate job (merged into quality-gate, IT-295)', () => {
+		const withLeftover =
+			validSalesWorkflow +
+			`  deployment-gate:
+    name: deployment-gate
+    if: \${{ always() }}
+    needs: [ci]
+    uses: GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main
+    with:
+      needs-json: \${{ toJSON(needs) }}
+      status-context: GG deployment gate
+`
 
 		expect(
-			validateWorkflowPolicy('GuestGuru/gg-sales', missing, salesInventory),
-		).toContain('Workflow must define a deployment-gate job')
-		expect(
-			validateWorkflowPolicy('GuestGuru/gg-sales', weakened, salesInventory),
-		).toEqual(
-			expect.arrayContaining([
-				'deployment-gate.if must be exactly ${{ always() }}',
-				'deployment-gate.needs must be exactly [ci]',
-			]),
+			validateWorkflowPolicy('GuestGuru/gg-sales', withLeftover, salesInventory),
+		).toContain(
+			'deployment-gate job must be removed — quality-gate publishes the GG deployment gate status (IT-295)',
 		)
 	})
 
-	it('requires the deployment gate to publish the dedicated Vercel status', () => {
+	it('requires the quality gate to publish the dedicated Vercel status', () => {
 		const missing = validSalesWorkflow.replace(
 			'\n      status-context: GG deployment gate',
 			'',
@@ -124,12 +119,12 @@ describe('workflow policy', () => {
 		expect(
 			validateWorkflowPolicy('GuestGuru/gg-sales', missing, salesInventory),
 		).toContain(
-			'deployment-gate.with.status-context must be exactly GG deployment gate',
+			'quality-gate.with.status-context must be exactly GG deployment gate',
 		)
 		expect(
 			validateWorkflowPolicy('GuestGuru/gg-sales', changed, salesInventory),
 		).toContain(
-			'deployment-gate.with.status-context must be exactly GG deployment gate',
+			'quality-gate.with.status-context must be exactly GG deployment gate',
 		)
 	})
 
@@ -235,6 +230,21 @@ jobs:
 		it('accepts a self-consistent manifest — every declared file matches', () => {
 			// Files hash to exactly what the manifest declares.
 			expect(validate({ manifest, actual: { ...manifest } })).toEqual([])
+		})
+
+		it('rejects a status-context on the gg-ci gate — gg-ci deploys nothing', () => {
+			const withContext = ggciWorkflow.replace(
+				'needs-json: ${{ toJSON(needs) }}',
+				'needs-json: ${{ toJSON(needs) }}\n      status-context: GG deployment gate',
+			)
+			expect(
+				validateWorkflowPolicy(
+					'GuestGuru/gg-ci',
+					withContext,
+					ggciInventory,
+					{ manifest, actual: { ...manifest } },
+				),
+			).toContain('quality-gate.with.status-context must be omitted')
 		})
 
 		it('accepts a declared change to a trusted file (updated hash in the manifest)', () => {

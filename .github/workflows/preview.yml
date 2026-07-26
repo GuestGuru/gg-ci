@@ -23,6 +23,14 @@
 # is already bound to that model. Keeping the comment in the callers would have
 # preserved the duplication this workflow exists to remove. It is opt-out via
 # the `comment` input.
+#
+# WHY ONE JOB AND NOT THREE. GitHub bills each job's runtime rounded UP to a
+# whole minute. Resolve, alias and comment are strictly sequential 4–20 second
+# tasks; as separate jobs they billed 3 minutes per preview deployment for
+# ~30 seconds of real work (measured 2026-07: that rounding tax was ~44% of the
+# month's entire Actions bill). As steps of one job they bill 1. The `preview`
+# and `unalias` jobs are event-disjoint — deployment_status vs pull_request
+# closed — so a single run only ever pays for one of them.
 name: Preview domain
 
 on:
@@ -58,16 +66,16 @@ on:
     outputs:
       pr-number:
         description: "Pull request number the deployment belongs to, or empty."
-        value: ${{ jobs.resolve.outputs.pr-number }}
+        value: ${{ jobs.preview.outputs.pr-number }}
       preview-url:
         description: "https://<alias-host>, set once the alias is attached."
-        value: ${{ jobs.alias.outputs.preview-url }}
+        value: ${{ jobs.preview.outputs.preview-url }}
       stale:
         description: "`true` when a newer preview deployment already exists for the same git ref. Tests should skip; the newer deployment's run covers them."
-        value: ${{ jobs.resolve.outputs.stale }}
+        value: ${{ jobs.preview.outputs.stale }}
       deployment-id:
         description: "Vercel deployment ID, or empty when this run was skipped."
-        value: ${{ jobs.resolve.outputs.deployment-id }}
+        value: ${{ jobs.preview.outputs.deployment-id }}
     secrets:
       VERCEL_TOKEN: { required: true }
 
@@ -87,7 +95,7 @@ jobs:
   # nothing. `meta.githubPrId` avoids the question entirely: measured
   # 2026-07-25 on 18 preview deployments across six projects, it was present on
   # every single one.
-  resolve:
+  preview:
     if: >-
       github.event_name == 'deployment_status' &&
       github.event.deployment_status.state == 'success' &&
@@ -95,11 +103,15 @@ jobs:
       github.event.deployment.environment != 'production'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
     outputs:
       pr-number: ${{ steps.r.outputs.pr-number }}
       deployment-id: ${{ steps.r.outputs.deployment-id }}
       alias-host: ${{ steps.r.outputs.alias-host }}
       stale: ${{ steps.r.outputs.stale }}
+      preview-url: ${{ steps.alias.outputs.preview-url }}
     steps:
       - id: r
         shell: bash
@@ -170,14 +182,6 @@ jobs:
             echo "stale=false" >> "$GITHUB_OUTPUT"
           fi
 
-  alias:
-    needs: resolve
-    if: needs.resolve.outputs.deployment-id != ''
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    outputs:
-      preview-url: ${{ steps.alias.outputs.preview-url }}
-    steps:
       # The CLI comes from the SAME commit this workflow YAML came from.
       # `job.workflow_sha` is exactly that for a reusable workflow.
       #
@@ -185,25 +189,29 @@ jobs:
       # got main's CLI, which silently ignored any input the branch had added —
       # the run went green and did nothing (measured while onboarding
       # GuestGuru/tools, 2026-07-19).
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - if: steps.r.outputs.deployment-id != ''
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           repository: GuestGuru/gg-ci
           ref: ${{ job.workflow_sha }}
 
-      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      - if: steps.r.outputs.deployment-id != ''
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "24"
           cache: npm
 
-      - run: npm ci
+      - if: steps.r.outputs.deployment-id != ''
+        run: npm ci
 
       - name: Attach alias
         id: alias
+        if: steps.r.outputs.deployment-id != ''
         shell: bash
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          ALIAS_HOST: ${{ needs.resolve.outputs.alias-host }}
-          DEPLOYMENT_ID: ${{ needs.resolve.outputs.deployment-id }}
+          ALIAS_HOST: ${{ steps.r.outputs.alias-host }}
+          DEPLOYMENT_ID: ${{ steps.r.outputs.deployment-id }}
           VERCEL_PROJECT_ID: ${{ inputs.vercel-project-id }}
           VERCEL_TEAM_ID: ${{ inputs.vercel-team-id }}
           DRY_RUN: ${{ inputs.dry-run }}
@@ -225,15 +233,6 @@ jobs:
           url="$(grep -m1 '^preview-url=' cli-output.log | cut -d= -f2- || true)"
           [[ -n "$url" ]] && echo "preview-url=$url" >> "$GITHUB_OUTPUT"
 
-  comment:
-    needs: [resolve, alias]
-    if: inputs.comment && needs.alias.outputs.preview-url != ''
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
       # ONE comment per pull request, updated in place — otherwise every push
       # leaves another one behind. The marker is an HTML comment so it is
       # invisible in the rendered body but findable in the raw text.
@@ -241,11 +240,13 @@ jobs:
       # Deliberately not `gh pr comment --edit-last`: that edits the last comment
       # by the actor whatever it is, so an unrelated bot comment in between gets
       # overwritten. Matching on our own marker cannot do that.
-      - shell: bash
+      - name: Comment on the pull request
+        if: inputs.comment && steps.alias.outputs.preview-url != ''
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ needs.resolve.outputs.pr-number }}
-          URL: ${{ needs.alias.outputs.preview-url }}
+          PR: ${{ steps.r.outputs.pr-number }}
+          URL: ${{ steps.alias.outputs.preview-url }}
           NOTE: ${{ inputs.comment-note }}
         run: |
           set -o pipefail
