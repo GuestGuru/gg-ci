@@ -73,7 +73,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/gg-sales': {
 		'.github/workflows/ci.yml':
-			'1f32c1a2cfdf71872d0d634d69e02f1a11086d95ff0fad948dba7a669d725767',
+			'288e4a1344bee330b8b363a18b1cf86c6dd7c317953990b55cc06211e9fda745',
 		'.github/workflows/preview-alias.yml':
 			'29b1443821e140721ece0a369b7ca67503f2f9d8a6a7441988cce1a74c0ca85d',
 	},
@@ -83,17 +83,17 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/BPDBv2': {
 		'.github/workflows/ci.yml':
-			'1358b03ff4d567766a4d3a6ba95696a52c8e793514019940095f8b96e31dd29b',
+			'675db4edd000439e641209000e2e3b76cfa22c791cac82ab10127c0bfec86f2e',
 		'.github/workflows/preview-alias.yml':
-			'635b6c5093168220ecfa28b91ec1f1bbf24946acd76fce7784bf9600b0a478db',
+			'937d383a545b5b669ff8af6ec9be3287538325fc8f861342a013f1b774ec7c7e',
 		'.github/workflows/preview-db.yml':
 			'59834e9e0f337cffe570cd58eaea22a8f17145d59c36692076e54135be5e4090',
 	},
 	'GuestGuru/gg-agents': {
 		'.github/workflows/ci.yml':
-			'8db35ede20d5e3b5587d6c23099c2da8d41a11253a5bd5c1405240e37e345a49',
+			'20e08e7f34776af096358da4abc5f9a215c56c0d0c1dd989da62f90f5997c784',
 		'.github/workflows/preview-alias.yml':
-			'cd336cb295215b54ba08b80a210458483e6a9a1e84bbd3dc3999dd425ffada09',
+			'7cb2b3ea2ecc1a9ba84d379de1a3d47accbcc42c21f651cfdc767d7730fbdaa4',
 	},
 	'GuestGuru/tools': {
 		'.github/workflows/ci.yml':
@@ -109,7 +109,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/irnok': {
 		'.github/workflows/ci.yml':
-			'd3e9aeb993a60bb766015df823d81e7435436066953e8557d5cb47fa36507b32',
+			'f6f02e73c27c1fdfc95bdf7bfe37157e81528b1d51bf6ac53e4a753b1b7a439b',
 		'.github/workflows/preview-alias.yml':
 			'd5cbdc7f070ebd3db407a0284951bb5d4ec6e3c42613320f413f281e1805b7ce',
 		'.github/workflows/preview-db.yml':
@@ -117,7 +117,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/gg-tracker': {
 		'.github/workflows/ci.yml':
-			'bf9be761721878954e25cb6fbb753a41bb8251923bf0134587c4e47ad68894c5',
+			'86e3ec5b87a023961d7ca4ce09f2cdb2602725cb791cf18188cb6b55af9caa82',
 		'.github/workflows/preview-alias.yml':
 			'f7e8e38e6d80ffdecebc6b27740571f169d811bd5a49b73030d20aac57f27e56',
 		'.github/workflows/preview-db.yml':
