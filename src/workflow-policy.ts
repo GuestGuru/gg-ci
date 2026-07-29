@@ -67,12 +67,21 @@ const policies: Record<string, WorkflowPolicy> = {
 		requiredNeeds: ['test'],
 		uses: './.github/workflows/quality-gate.yml',
 	},
+	// A gg-mcp NEM Vercel-projekt (systemd a marveenen), tehát a szabványból csak
+	// a merge-kapu értelmezhető rá — a `GG deployment gate` status-contextet mégis
+	// megtartja, mert az org-ruleset ezt a nevet követeli.
+	'GuestGuru/gg-mcp': {
+		workflowPath: '.github/workflows/ci.yml',
+		requiredNeeds: ['ci'],
+		uses: centralGate,
+		statusContext: 'GG deployment gate',
+	},
 }
 
 const approvedWorkflowInventories: Record<string, Record<string, string>> = {
-	"GuestGuru/gg-mcp": {
-		".github/workflows/ci.yml":
-			"f29487cb7c9219bcfcd8aac0bab6b8b08e08770a1b1b325718c66f022f11e1f7",
+	'GuestGuru/gg-mcp': {
+		'.github/workflows/ci.yml':
+			'f29487cb7c9219bcfcd8aac0bab6b8b08e08770a1b1b325718c66f022f11e1f7',
 	},
 	'GuestGuru/gg-ci': {
 		'.github/workflows/ci.yml':
