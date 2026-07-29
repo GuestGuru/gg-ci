@@ -70,6 +70,10 @@ const policies: Record<string, WorkflowPolicy> = {
 }
 
 const approvedWorkflowInventories: Record<string, Record<string, string>> = {
+	"GuestGuru/gg-mcp": {
+		".github/workflows/ci.yml":
+			"f29487cb7c9219bcfcd8aac0bab6b8b08e08770a1b1b325718c66f022f11e1f7",
+	},
 	'GuestGuru/gg-ci': {
 		'.github/workflows/ci.yml':
 			'3fc6c8a4df55f972e91821f511e3716d78d9517cf4da28d5e37cec6d0e504001',
