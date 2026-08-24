@@ -76,9 +76,24 @@ const policies: Record<string, WorkflowPolicy> = {
 		uses: centralGate,
 		statusContext: 'GG deployment gate',
 	},
+	// gg-share — védett statikus oldalak megosztása (share.guest.guru).
+	'GuestGuru/gg-share': {
+		workflowPath: '.github/workflows/ci.yml',
+		requiredNeeds: ['ci'],
+		uses: centralGate,
+		statusContext: 'GG deployment gate',
+	},
 }
 
 const approvedWorkflowInventories: Record<string, Record<string, string>> = {
+	'GuestGuru/gg-share': {
+		'.github/workflows/ci.yml':
+			'e893eb18cacc5ad0be6b698776c0c3bc791990b212b9f240cb5be75b3d3628b5',
+		'.github/workflows/preview-alias.yml':
+			'af99ad81dc6b82f7e9bc6439191e76f054edf5ddccbc5e56309284fe278e730d',
+		'.github/workflows/preview-db.yml':
+			'ef72e4279f6f2cfdf4ce7a34ad46900860adc6c76ad217afe7ae8b06aa352ad0',
+	},
 	'GuestGuru/gg-mcp': {
 		'.github/workflows/ci.yml':
 			'f29487cb7c9219bcfcd8aac0bab6b8b08e08770a1b1b325718c66f022f11e1f7',
