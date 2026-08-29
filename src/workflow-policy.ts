@@ -128,7 +128,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/preview-alias.yml':
 			'a79efe1834f5d1710f94132815bdb4c0d88d6acc5265f862846511b357e40066',
 		'.github/workflows/preview-db.yml':
-			'a54d0977fc5dd2309d921987b5bda620f54d415e429855d8dba6a617f1645326',
+			'af44984929b66080c54ed058d90079719d561ab24aba2b044a2f0370137a96cb',
 	},
 	'GuestGuru/gg-agents': {
 		'.github/workflows/ci.yml':
