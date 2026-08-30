@@ -423,6 +423,7 @@ describe('policy source diagnostics (IT-594)', () => {
 			// egy central fájl változott, de a `src/trust-inventory.json` önhashe
 			// nem lett frissítve — pontosan az a hiba, amit a CI-ban a policy-gate
 			// dobna, csak itt már a `npm test` megmondja.
+			let mainQueried = false
 			const logs: string[] = []
 			const spy = vi
 				.spyOn(console, 'log')
@@ -438,7 +439,8 @@ describe('policy source diagnostics (IT-594)', () => {
 					{
 						readCheckoutSha: () => pinned,
 						readMainSha: () => {
-							throw new Error('main must not be queried on the success path')
+							mainQueried = true
+							return undefined
 						},
 					},
 				)
@@ -446,8 +448,12 @@ describe('policy source diagnostics (IT-594)', () => {
 				spy.mockRestore()
 			}
 
+			// A `code` assertje áll elöl szándékosan: bukáskor ez mondja meg, hogy a
+			// policy talált valamit — a mockolatlan console.error mellé kiírja, mit.
 			expect(code).toBe(0)
 			expect(logs.join('\n')).toContain(pinned)
+			// A main lekérdezése hálózati hívás: a sikeres ág ne fizesse meg.
+			expect(mainQueried).toBe(false)
 		})
 	})
 })
