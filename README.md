@@ -67,10 +67,43 @@ An intentional workflow change is a two-PR operation: first update and merge the
 approved inventory here, then change the target repository to the pre-approved content.
 This keeps the trusted policy update outside the target pull request.
 
+### Releasing a policy change
+
 The organization ruleset must pin this required workflow to an immutable commit `sha`,
-never `refs/heads/main`. Updating the central policy is an explicit release operation:
-pin the ruleset to the reviewed candidate SHA, verify it, merge it, then pin the ruleset
-to the resulting main commit SHA.
+never `refs/heads/main`. The pin freezes the entire trusted checkout — the policy code
+**and** the approved inventory it evaluates against — so approving new content is a
+three-step release operation:
+
+1. **Merge the `gg-ci` pull request** that approves it: the new hash in
+   `approvedWorkflowInventories`, plus `src/trust-inventory.json` whenever a central file
+   changed. Hashes are byte-exact (`shasum -a 256 <file>`).
+2. **Re-pin the ruleset** to the resulting `main` SHA (`PUT /orgs/{org}/rulesets/{id}`,
+   organization admin). Not optional: until this happens every target repository still
+   evaluates the *previous* policy. It also invalidates the policy check of every open
+   pull request in the covered repositories, so re-run step 3 on each of them.
+3. **Close/reopen the target pull request** so the policy runs again under the fresh pin.
+   A plain re-run does not help — `ref: ${{ job.workflow_sha }}` inherits the old pin.
+
+Changing `gg-ci`'s own `.github/workflows/` files needs one extra turn of the same crank,
+since the trusted checkout also carries the inventory that approves them: pin the ruleset
+to the reviewed candidate SHA, verify, merge, then pin to the resulting main SHA.
+
+**A skipped step 2 fails misleadingly.** The target repository reports
+`Workflow content is not approved: <path>` for content that *is* approved, in a repository
+whose pull request never touched that file. Every policy run therefore names the commit it
+ran from, and on failure compares it with `main` — so the output itself separates a stale
+pin from a real violation:
+
+```
+workflow-policy: Workflow content is not approved: .github/workflows/preview-db.yml
+workflow-policy: Policy source: GuestGuru/gg-ci@eda86e0… — the commit the organization ruleset pins .github/workflows/policy-gate.yml to.
+workflow-policy: GuestGuru/gg-ci main is at 1690247…, which is NOT the pinned commit — this run evaluated an older policy than main's.
+workflow-policy: If the content above was approved in a GuestGuru/gg-ci pull request that has since merged, that is the cause: re-pin …
+```
+
+The pinned commit comes from the trusted checkout's own `HEAD` (`GITHUB_WORKFLOW_SHA` as a
+fallback), and `main` from `git ls-remote` — no token, because this repository is public.
+When the pin already matches `main`, the run says so instead, ruling the stale pin out.
 
 Rollout order matters: merge `gg-ci`, switch every caller from its temporary test ref
 to `@main`, verify all checks, and only then enable the organization ruleset workflow

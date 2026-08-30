@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -400,12 +401,150 @@ export function validateWorkflowPolicy(
 	]
 }
 
-export function run(argv: string[], env: NodeJS.ProcessEnv = process.env): number {
+// --- Honnan fut ez a policy? (IT-594) ---------------------------------------
+//
+// Az org-ruleset a required policy workflow-t egy IMMUTABLE gg-ci sha-ra
+// pinneli, és a workflow EBBŐL a commitból checkoutolja a teljes
+// implementációt — az `approvedWorkflowInventories` hasheit is. Ha egy hash már
+// a mainen van, de a pint nem vitték utána, a CÉL-repo azt látja, hogy
+// „Workflow content is not approved", miközben a tartalom jóvá VAN hagyva: a
+// tünet a cél-repóban jelenik meg, az ok a gg-ci-ben van, és a bukott futás
+// rerunja sem segít (a `ref: job.workflow_sha` a régi sha-t örökli). Ezért
+// minden futás megmondja, melyik commitból fut, és bukáskor összeveti a main
+// HEAD-jével — így a kimenetből eldől, elavult pin vagy valódi policy-sértés.
+
+export type PolicySource = {
+	repository?: string
+	sha?: string
+}
+
+export type PolicyRunDeps = {
+	readCheckoutSha?: () => string | undefined
+	readMainSha?: (repository: string) => string | undefined
+}
+
+const REPOSITORY_PATTERN = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/
+const COMMIT_SHA_PATTERN = /^[0-9a-f]{40}$/
+
+// A trusted checkout HEAD-je a hiteles válasz: a policy-gate `ref:
+// job.workflow_sha`-val hozza le ezt a fát, tehát a detached HEAD PONTOSAN a
+// pinnelt commit. A GITHUB_WORKFLOW_SHA csak fallback, ha a checkoutnak nincs
+// olvasható .git-je.
+function readCheckoutHeadSha(): string | undefined {
+	try {
+		const head = readFileSync(
+			new URL('../.git/HEAD', import.meta.url),
+			'utf8',
+		).trim()
+		return COMMIT_SHA_PATTERN.test(head) ? head : undefined
+	} catch {
+		return undefined
+	}
+}
+
+// GITHUB_WORKFLOW_REF alakja:
+// "<owner>/<repo>/.github/workflows/policy-gate.yml@refs/heads/main"
+export function resolvePolicySource(
+	env: NodeJS.ProcessEnv,
+	readCheckoutSha: () => string | undefined = readCheckoutHeadSha,
+): PolicySource {
+	const [owner, name] = (env.GITHUB_WORKFLOW_REF ?? '').split('/')
+	const repository = owner && name ? `${owner}/${name}` : ''
+	const sha = readCheckoutSha() ?? env.GITHUB_WORKFLOW_SHA ?? ''
+	return {
+		repository: REPOSITORY_PATTERN.test(repository) ? repository : undefined,
+		sha: COMMIT_SHA_PATTERN.test(sha) ? sha : undefined,
+	}
+}
+
+export function policySourceLine(source: PolicySource): string {
+	const repository = source.repository ?? 'the trusted policy repository'
+	if (!source.sha) {
+		return `Policy source: ${repository}@unknown — neither the trusted checkout's HEAD nor GITHUB_WORKFLOW_SHA named a commit.`
+	}
+	return `Policy source: ${repository}@${source.sha} — the commit the organization ruleset pins .github/workflows/policy-gate.yml to.`
+}
+
+export function stalePinDiagnosis(
+	source: PolicySource,
+	mainSha?: string,
+): string[] {
+	const repository = source.repository ?? 'the policy repository'
+	const repin = `re-pin the organization ruleset's required workflow to main's SHA (org admin), then close/reopen this pull request — a re-run inherits the old pin.`
+
+	if (!source.sha) {
+		return [
+			`Whether the ruleset pin is stale is unknown here, because this policy's own commit could not be determined. If a ${repository} pull request has already approved the content above, ${repin}`,
+		]
+	}
+	if (!mainSha) {
+		return [
+			`Could not read ${repository} main's SHA to compare against. If the content above was approved by a ${repository} commit newer than the pinned one, the pin is stale: ${repin}`,
+		]
+	}
+	if (mainSha === source.sha) {
+		return [
+			`${repository} main is at the same commit, so the ruleset pin is up to date — this is a real policy violation, not a stale pin.`,
+		]
+	}
+	return [
+		`${repository} main is at ${mainSha}, which is NOT the pinned commit — this run evaluated an older policy than main's.`,
+		`If the content above was approved in a ${repository} pull request that has since merged, that is the cause: ${repin}`,
+	]
+}
+
+// A gg-ci publikus, ezért a main HEAD token nélkül is olvasható. `git
+// ls-remote` és nem a REST API: az utóbbi hitelesítés nélkül 60 kérés/óra/IP,
+// megosztott runner-IP-kkel megbízhatatlan.
+function readMainShaFromRemote(repository: string): string | undefined {
+	if (!REPOSITORY_PATTERN.test(repository)) return undefined
+	try {
+		const output = execFileSync(
+			'git',
+			[
+				'ls-remote',
+				`https://github.com/${repository}.git`,
+				'refs/heads/main',
+			],
+			{ encoding: 'utf8', timeout: 15_000, stdio: ['ignore', 'pipe', 'ignore'] },
+		)
+		const sha = output.split(/\s/)[0] ?? ''
+		return COMMIT_SHA_PATTERN.test(sha) ? sha : undefined
+	} catch {
+		return undefined
+	}
+}
+
+function reportFailure(
+	errors: string[],
+	source: PolicySource,
+	deps: PolicyRunDeps,
+): number {
+	for (const error of errors) console.error(`workflow-policy: ${error}`)
+	console.error(`workflow-policy: ${policySourceLine(source)}`)
+	const mainSha = source.repository
+		? (deps.readMainSha ?? readMainShaFromRemote)(source.repository)
+		: undefined
+	for (const line of stalePinDiagnosis(source, mainSha)) {
+		console.error(`workflow-policy: ${line}`)
+	}
+	return 1
+}
+
+export function run(
+	argv: string[],
+	env: NodeJS.ProcessEnv = process.env,
+	deps: PolicyRunDeps = {},
+): number {
 	const repository = env.GITHUB_REPOSITORY ?? ''
+	const source = resolvePolicySource(env, deps.readCheckoutSha)
 	const policy = policyForRepository(repository)
 	if (!policy) {
-		console.error(`workflow-policy: no policy configured for ${repository || '(missing repository)'}`)
-		return 1
+		return reportFailure(
+			[`no policy configured for ${repository || '(missing repository)'}`],
+			source,
+			deps,
+		)
 	}
 
 	const targetRoot = argv[0] ?? '.'
@@ -435,10 +574,11 @@ export function run(argv: string[], env: NodeJS.ProcessEnv = process.env): numbe
 			centralTrust = { manifest, actual }
 		}
 	} catch {
-		console.error(
-			`workflow-policy: cannot read ${policy.workflowPath} or workflow inventory`,
+		return reportFailure(
+			[`cannot read ${policy.workflowPath} or workflow inventory`],
+			source,
+			deps,
 		)
-		return 1
 	}
 
 	const errors = validateWorkflowPolicy(
@@ -449,11 +589,11 @@ export function run(argv: string[], env: NodeJS.ProcessEnv = process.env): numbe
 	)
 	if (errors.length === 0) {
 		console.log(`workflow-policy: ${repository} uses the canonical quality gate`)
+		console.log(`workflow-policy: ${policySourceLine(source)}`)
 		return 0
 	}
 
-	for (const error of errors) console.error(`workflow-policy: ${error}`)
-	return 1
+	return reportFailure(errors, source, deps)
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
