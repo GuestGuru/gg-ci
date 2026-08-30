@@ -33,3 +33,5 @@ jobs:
     uses: ./.github/workflows/quality-gate.yml
     with:
       needs-json: ${{ toJSON(needs) }}
+
+# kanári sor — IT-594 verifikáció
