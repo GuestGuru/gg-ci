@@ -570,3 +570,5 @@ schema. The caller example above already accounts for them.
   client follows the cursor instead of reading only the first page.
 - `DELETE /v2/aliases/{id}` returns 404 for an unknown alias, which the CLI treats as the
   desired end state.
+
+<!-- kanári: IT-594 policy-forrás diagnosztika élesben, törlendő -->
