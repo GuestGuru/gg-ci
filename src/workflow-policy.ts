@@ -115,7 +115,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/gg-sales': {
 		'.github/workflows/ci.yml':
-			'15f199bf5bc56dbf8966f10f521b9e47de563e7f478b4772b387ca601b4f2d97',
+			'00fe4bd2f24c71b4446ca5fac41bd1215a9cf25513f41c4c0211a50dd8c95099',
 		'.github/workflows/preview-alias.yml':
 			'29b1443821e140721ece0a369b7ca67503f2f9d8a6a7441988cce1a74c0ca85d',
 	},
