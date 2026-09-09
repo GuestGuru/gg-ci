@@ -45,6 +45,12 @@ const policies: Record<string, WorkflowPolicy> = {
 		uses: centralGate,
 		statusContext: 'GG deployment gate',
 	},
+	'GuestGuru/gg-ops': {
+		workflowPath: '.github/workflows/ci.yml',
+		requiredNeeds: ['ci'],
+		uses: centralGate,
+		statusContext: 'GG deployment gate',
+	},
 	'GuestGuru/tools': {
 		workflowPath: '.github/workflows/ci.yml',
 		requiredNeeds: ['ci'],
@@ -138,6 +144,10 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 			'0ee779808d23cdda77856f8f9142c7922b68df0e81ca35d2f3c072706cd2daf2',
 		'.github/workflows/preview-alias.yml':
 			'c995976fc79b21c4bbe46adf999654638431f5b7f865c23116d9e9283429788b',
+	},
+	'GuestGuru/gg-ops': {
+		'.github/workflows/ci.yml':
+			'cf74d08b38db51d72170f925562179cf3917fd03040adb446351aaa032888db5',
 	},
 	'GuestGuru/tools': {
 		'.github/workflows/ci.yml':
