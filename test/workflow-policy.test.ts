@@ -63,6 +63,12 @@ describe('workflow policy', () => {
 			'ci',
 			'integration',
 		])
+		expect(policyForRepository('GuestGuru/gg-ops')).toEqual({
+			workflowPath: '.github/workflows/ci.yml',
+			requiredNeeds: ['ci'],
+			uses: 'GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main',
+			statusContext: 'GG deployment gate',
+		})
 		expect(policyForRepository('GuestGuru/tools')?.requiredNeeds).toEqual(['ci'])
 		expect(policyForRepository('GuestGuru/irnok')?.requiredNeeds).toEqual([
 			'web',
@@ -83,6 +89,13 @@ describe('workflow policy', () => {
 				salesInventory,
 			),
 		).toEqual([])
+	})
+
+	it('pins the approved gg-ops workflow', () => {
+		expect(workflowInventoryForRepository('GuestGuru/gg-ops')).toEqual({
+			'.github/workflows/ci.yml':
+				'cf74d08b38db51d72170f925562179cf3917fd03040adb446351aaa032888db5',
+		})
 	})
 
 	it('rejects missing mandatory dependencies', () => {
