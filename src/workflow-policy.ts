@@ -103,7 +103,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/gg-mcp': {
 		'.github/workflows/ci.yml':
-			'd7a8357212ac5e695b93e57ed73b2821dab618bcb515d3d5ecf448e93c8dec10',
+			'f29487cb7c9219bcfcd8aac0bab6b8b08e08770a1b1b325718c66f022f11e1f7',
 	},
 	'GuestGuru/gg-ci': {
 		'.github/workflows/ci.yml':
