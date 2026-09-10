@@ -101,7 +101,18 @@ jobs:
       github.event.deployment_status.state == 'success' &&
       github.event.deployment.environment != 'Production' &&
       github.event.deployment.environment != 'production'
-    runs-on: ubuntu-latest
+    # Runner selection (IT-570). The label comes from the caller's
+    # `GG_CI_RUNNER` organization variable, so this public repository names no
+    # runner of its own:
+    #   * unset (public repositories, and any repository the variable is not
+    #     shared with) -> `ubuntu-latest`, the GitHub-hosted default;
+    #   * set         -> that self-hosted label.
+    # `schedule` is excluded on purpose: a self-hosted runner may be asleep at
+    # cron time, so scheduled work always stays on GitHub-hosted runners.
+    # Deleting the organization variable moves every caller back to
+    # `ubuntu-latest` in one step -- the emergency brake when the self-hosted
+    # runner is unavailable.
+    runs-on: ${{ (github.event_name != 'schedule' && vars.GG_CI_RUNNER) || 'ubuntu-latest' }}
     timeout-minutes: 10
     permissions:
       contents: read
@@ -271,7 +282,8 @@ jobs:
   # looks like it is still showing the pull request.
   unalias:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
-    runs-on: ubuntu-latest
+    # Runner selection: see the note on the first job (IT-570).
+    runs-on: ${{ (github.event_name != 'schedule' && vars.GG_CI_RUNNER) || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0

@@ -2,5 +2,5 @@
 	"package-lock.json": "81bb851948cfcca2efc198ba888982467f6c1dbff9ee5b11ea689e9553606bcc",
 	"package.json": "3c99961727588ba6f7fb8b24a60454d5c4bc36ae91ffa25e9c623e89a3af539c",
 	"src/quality-gate.ts": "ef625372b96447365fe1bfa40d9ef5fa64f5ea68fd5ddd142a28b52705cc50b8",
-	"src/workflow-policy.ts": "d7ae1866d78a6da15fe5a6a508fa0d33b893bf805eb6c1c1e39de001ca962850"
+	"src/workflow-policy.ts": "7b8e8026bc81536b9a4d36ee45bcf0a5b0d7425892a9fff498d05a4635559550"
 }
