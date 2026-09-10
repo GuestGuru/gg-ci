@@ -112,10 +112,8 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 			'2b90ae54788591afcd45febdc59be1489310e5f193687a0744f8b9fd73530fdf',
 		'.github/workflows/policy-gate.yml':
 			'b5e629a4d70094a37601ce3fa9b2581ebde44c23ba026e0e96cefb6739ca8d78',
-		'.github/workflows/preview-alias.yml':
-			'1d033ed8a494df67bf3f514d2b670a862769b5eb5c7755d98b723182b2fc7bc2',
 		'.github/workflows/preview.yml':
-			'0900fc9a8f0ab9719eb70e4aa8feee7c1c55ea3b71518cacee3f68f2aa22a7fc',
+			'1eab5302895cb1c0f0c33a99a7c83d5954737009286fbdbfb1e4de057b788986',
 		'.github/workflows/quality-gate.yml':
 			'c17612b20c64accf05bfd1a89d1c33dcf052be450089f79e94a9452f9f2e3893',
 	},

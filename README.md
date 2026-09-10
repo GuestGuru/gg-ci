@@ -436,6 +436,11 @@ preview onto a subdomain of the cookie's domain makes the existing session reach
 per-PR host (`myapp-pr-12.preview.example.com`) does not exist until the PR does, so it
 cannot be added by hand in advance.
 
+The reusable workflow that runs this end to end is
+**`.github/workflows/preview.yml`** — it resolves the pull request and the Vercel
+deployment, decides whether the deployment is already superseded, attaches the alias,
+and posts the PR comment. Callers pass their own identifiers and nothing else.
+
 Prerequisite: the **apex domain** (`example.com`) must be owned by the Vercel **team**
 that owns the project, with DNS pointing at Vercel. Sub-domains of a team-owned apex come
 back `verified: true` immediately, with no TXT challenge. If the apex sits in a personal
@@ -453,116 +458,73 @@ Both are idempotent and support `dry-run`. `alias-set` re-run against a newer de
 moves the alias over — that is the normal path on every push. `alias-remove` succeeds when
 the alias, the domain, or both are already gone.
 
-The workflow deliberately **does not comment on the pull request**. gg-ci stays
-independent of GitHub's PR model (the same reasoning behind `open-pr-numbers`); the
-caller gets the finished URL as the `preview-url` output and decides what to do with it.
+The **CLI** stays independent of GitHub's PR model — it knows about Vercel deployments
+and hostnames, nothing else (the same reasoning behind `open-pr-numbers`). The
+**workflow** is bound to that model anyway, since `deployment_status` and
+`pull_request` are what trigger it, so it does post the PR comment; `comment: false`
+opts out and the caller uses the `preview-url` output instead.
 
 #### Inputs
 
 | Input | Type | Required | Meaning |
 |---|---|---|---|
-| `command` | string | yes | `set` \| `remove` |
-| `alias-host` | string | yes | Full hostname to assign, e.g. `myapp-pr-12.preview.example.com`. A bare hostname — passing a URL is rejected. |
-| `deployment-id` | string | only for `set` | The Vercel deployment ID to alias. |
+| `alias-host-pattern` | string | yes | Alias hostname with a `{pr}` placeholder, e.g. `myapp-pr-{pr}.preview.example.com`. A bare hostname — passing a URL is rejected. |
 | `vercel-project-id` | string | yes | Vercel project ID that owns the deployment and the alias. |
 | `vercel-team-id` | string | yes | Vercel team (organization) ID that owns the project above. |
-| `dry-run` | boolean | no (default `false`) | Logs the action without calling the Vercel write APIs. |
+| `comment` | boolean | no (default `true`) | Post — and keep updating — a single PR comment with the preview link. |
+| `comment-note` | string | no | Extra sentence shown under the link in that comment. |
+| `dry-run` | boolean | no (default `false`) | Logs the actions without calling the Vercel write APIs. |
+
+`VERCEL_TOKEN` is a required secret.
 
 #### Outputs
 
 | Output | Meaning |
 |---|---|
-| `preview-url` | `https://<alias-host>`, set by `set`. |
+| `preview-url` | `https://<alias-host>`, set once the alias is attached. |
+| `pr-number` | Pull request number the deployment belongs to, or empty. |
+| `deployment-id` | Vercel deployment ID, or empty when the run was skipped. |
+| `stale` | `true` when a newer preview deployment already exists for the same git ref. A caller's smoke job should skip on this — the newer deployment's run covers it. |
 
 #### Caller example
 
-`deployment_status` fires once Vercel reports the preview as ready — aliasing earlier
-fails, since a deployment that is not `READY` cannot be aliased.
+The whole caller is identifiers. `deployment_status` fires once Vercel reports the
+preview as ready — aliasing earlier fails, since a deployment that is not `READY`
+cannot be aliased — and `pull_request: closed` drives the cleanup.
 
 ```yaml
+name: Preview alias
+
 on:
   deployment_status:
   pull_request:
     types: [closed]
 
 jobs:
-  find-pr:
-    if: github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success'
-    runs-on: ubuntu-latest
+  preview:
+    uses: GuestGuru/gg-ci/.github/workflows/preview.yml@main
     permissions:
-      pull-requests: read
-    outputs:
-      number: ${{ steps.pr.outputs.number }}
-      deployment-id: ${{ steps.deployment.outputs.id }}
-    steps:
-      - id: pr
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REF: ${{ github.event.deployment.ref }}
-        run: |
-          # Vercel puts a commit SHA in `deployment.ref`, not a branch name,
-          # so resolve the PR through the commit. The branch-name lookup is a
-          # fallback for integrations that do send a ref.
-          number=$(gh api "repos/$GITHUB_REPOSITORY/commits/$REF/pulls" \
-            --jq '[.[] | select(.state == "open")][0].number // ""' 2>/dev/null || echo "")
-          if [[ -z "$number" ]]; then
-            number=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$REF" --state open \
-              --json number --jq '.[0].number // ""' 2>/dev/null || echo "")
-          fi
-          echo "number=$number" >> "$GITHUB_OUTPUT"
-
-      # Vercel sends an EMPTY deployment payload, so there is no deploymentId
-      # to read. The status's target_url carries the preview hostname, and the
-      # Vercel API accepts a hostname wherever it accepts a deployment ID.
-      - id: deployment
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          TARGET_URL: ${{ github.event.deployment_status.target_url }}
-          TEAM_ID: your-vercel-team-id
-        run: |
-          host="${TARGET_URL#https://}"
-          host="${host%%/*}"
-          id=$(curl -sf "https://api.vercel.com/v13/deployments/${host}?teamId=${TEAM_ID}" \
-            -H "Authorization: Bearer $VERCEL_TOKEN" | jq -r '.id // ""')
-          if [[ -z "$id" ]]; then
-            echo "Could not resolve a deployment ID from: $host"
-            exit 1
-          fi
-          echo "id=$id" >> "$GITHUB_OUTPUT"
-
-  alias:
-    needs: find-pr
-    if: needs.find-pr.outputs.number != ''
-    uses: GuestGuru/gg-ci/.github/workflows/preview-alias.yml@main
+      contents: read
+      pull-requests: write
     with:
-      command: set
-      deployment-id: ${{ needs.find-pr.outputs.deployment-id }}
-      alias-host: myapp-pr-${{ needs.find-pr.outputs.number }}.preview.example.com
-      vercel-project-id: your-vercel-project-id
-      vercel-team-id: your-vercel-team-id
-    secrets:
-      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-
-  unalias:
-    if: github.event_name == 'pull_request'
-    uses: GuestGuru/gg-ci/.github/workflows/preview-alias.yml@main
-    with:
-      command: remove
-      alias-host: myapp-pr-${{ github.event.pull_request.number }}.preview.example.com
+      alias-host-pattern: myapp-pr-{pr}.preview.example.com
       vercel-project-id: your-vercel-project-id
       vercel-team-id: your-vercel-team-id
     secrets:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 ```
 
-To comment the URL on the PR, add a job that consumes `needs.alias.outputs.preview-url`
-in your own repository — that keeps the GitHub-specific part on your side.
+⚠️ A smoke job in the caller must gate on the PR number **and** on `stale` — see the
+`GG smoke gate` pattern in the delivery standard — otherwise a superseded deployment
+can publish a green status for code that is no longer current.
 
 #### What the Vercel deployment event actually contains
 
 Both facts below were measured against a live Vercel–GitHub integration
 (2026-07-19) and contradict the obvious reading of GitHub's `deployment_status`
-schema. The caller example above already accounts for them.
+schema. `preview.yml` already accounts for both — which is why the caller above passes
+no deployment id and no PR number. They are recorded here because anything that reads
+these events directly will hit them again.
 
 - **`deployment.ref` is a commit SHA, not a branch name.** `gh pr list --head "$REF"`
   therefore matches nothing and the alias job is skipped — silently, since "no PR

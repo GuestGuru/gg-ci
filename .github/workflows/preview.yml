@@ -16,9 +16,9 @@
 # must never contain infrastructure identifiers. Do NOT add default values for
 # them.
 #
-# ⚠️ A note on the PR comment. `preview-alias.yml` deliberately does not comment
-# on pull requests, to keep gg-ci independent of GitHub's PR model. That
-# reasoning does not carry over here: this workflow is triggered BY GitHub's
+# ⚠️ A note on the PR comment. The CLI underneath deliberately knows nothing about
+# pull requests, to keep gg-ci independent of GitHub's PR model. That reasoning
+# does not carry over to this workflow: it is triggered BY GitHub's
 # `deployment_status` and `pull_request` events and reads `github.event`, so it
 # is already bound to that model. Keeping the comment in the callers would have
 # preserved the duplication this workflow exists to remove. It is opt-out via
