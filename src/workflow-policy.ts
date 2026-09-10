@@ -127,9 +127,9 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/gg-design': {
 		'.github/workflows/registry.yml':
-			'3120002313bd7e33bf27fb30c7019ed9c2b71ee069153a725957c9973f936eba',
+			'3bd18d29663ba3da5a52d90b09fc2a62211d33b239cbd4fce9db2ed13cf4e0ec',
 		'.github/workflows/preview.yml':
-			'a9d76451c284f712e10fb7e509364b5d7474a7d645db3bd8afb10b8e79c7a8e8',
+			'bad70d6524bb5578f4c9e26be15e293a929dacb1d42abd32fe0377573cbd6ab2',
 	},
 	'GuestGuru/BPDBv2': {
 		'.github/workflows/ci.yml':
