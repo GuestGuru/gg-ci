@@ -7,26 +7,26 @@ default values here.
 ## Organization quality gate
 
 `.github/workflows/quality-gate.yml` turns a caller workflow's required job results into
-one stable final result. Call it twice with different job names: the organization
-ruleset uses `quality-gate / verify`, while Vercel uses
-the explicit `GG deployment gate` commit status published by `deployment-gate`.
-The result and dependencies are identical, but Vercel must consume the commit status
-rather than the job's Check Run because GitHub Check Run synchronization can race with
-Vercel Deployment Checks.
+one stable final result, and publishes that same result twice: as the
+`quality-gate / verify` Check Run the organization ruleset requires, and as the
+`GG deployment gate` commit status Vercel consumes. Vercel must consume the commit
+status rather than the job's Check Run because GitHub Check Run synchronization can
+race with Vercel Deployment Checks.
 
-Call both gates after every mandatory CI job:
+**One call, not two.** A separate `deployment-gate` job used to run the identical
+evaluation on a second VM; because GitHub rounds every job up to a billed minute,
+that was one wasted minute per run. The policy now *requires* the single-call shape
+and rejects a leftover `deployment-gate` job.
+
+Call the gate once, after every mandatory CI job:
 
 ```yaml
+permissions:
+  contents: read
+  statuses: write
+
 quality-gate:
   name: quality-gate
-  if: ${{ always() }}
-  needs: [lint, test]
-  uses: GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main
-  with:
-    needs-json: ${{ toJSON(needs) }}
-
-deployment-gate:
-  name: deployment-gate
   if: ${{ always() }}
   needs: [lint, test]
   uses: GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main
@@ -66,6 +66,47 @@ target-repository npm configuration outside the trust path.
 An intentional workflow change is a two-PR operation: first update and merge the
 approved inventory here, then change the target repository to the pre-approved content.
 This keeps the trusted policy update outside the target pull request.
+
+### Which runner these workflows use
+
+Every job in this repository's reusable workflows — and in the ruleset-injected
+`policy-gate.yml` — picks its runner the same way:
+
+```yaml
+runs-on: ${{ (github.event_name != 'schedule' && vars.GG_CI_RUNNER) || 'ubuntu-latest' }}
+```
+
+`vars` resolves against the **caller's** repository and organization (for
+`policy-gate.yml`, against the target repository), so the choice is made entirely
+here: a caller passes nothing, and no caller workflow needs to change when the
+runner changes. The rules that follow from the expression:
+
+| situation | runner |
+|---|---|
+| `GG_CI_RUNNER` is not shared with the repository — including every public repository, this one among them | `ubuntu-latest` |
+| `GG_CI_RUNNER` is shared with the repository | that label |
+| the caller's triggering event is `schedule` | `ubuntu-latest`, always |
+
+Three things this shape buys, each of them deliberate:
+
+* **Public repositories stay on GitHub-hosted runners.** Self-hosted runners are a
+  security hazard on public repositories, and their minutes are free anyway. Share
+  the variable with private repositories only (visibility `selected`), and keep that
+  list in step with the runner group that owns the label — a repository that reads a
+  label it may not use queues forever.
+* **Scheduled work stays on GitHub-hosted runners.** A self-hosted runner may be
+  asleep at cron time. Putting the exclusion here rather than in each caller means a
+  future cron caller cannot get it wrong.
+* **One-step emergency brake.** Deleting the organization variable moves every
+  caller back to `ubuntu-latest` immediately — no workflow change, no policy
+  inventory update, no ruleset re-pin:
+
+  ```bash
+  gh variable delete GG_CI_RUNNER --org <org>
+  ```
+
+This repository's own `.github/workflows/ci.yml` is pinned to `ubuntu-latest` on
+purpose, for the same reason as the first row of the table.
 
 ### Releasing a policy change
 
