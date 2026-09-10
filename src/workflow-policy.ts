@@ -99,11 +99,11 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/preview-alias.yml':
 			'ae5c628e2a98c0c4f839ae0c0c0abe7128cb19dde274bf371a405a1064dfcb2a',
 		'.github/workflows/preview-db.yml':
-			'ff361c70095f8f23ca7d0abc64f6945db477c9fb9b98d487af74ce4dee452086',
+			'ef72e4279f6f2cfdf4ce7a34ad46900860adc6c76ad217afe7ae8b06aa352ad0',
 	},
 	'GuestGuru/gg-mcp': {
 		'.github/workflows/ci.yml':
-			'f29487cb7c9219bcfcd8aac0bab6b8b08e08770a1b1b325718c66f022f11e1f7',
+			'd7a8357212ac5e695b93e57ed73b2821dab618bcb515d3d5ecf448e93c8dec10',
 	},
 	'GuestGuru/gg-ci': {
 		'.github/workflows/ci.yml':
@@ -151,11 +151,11 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/tools': {
 		'.github/workflows/ci.yml':
-			'7cf0127957915ca2e2f39bbdb78f6fedeaf5d3a76cfa73e8e0627e5f65952ae4',
+			'ed521bde7f4ef2305e69f66a1659ee55d59bd7f0e669e0a7337f5d4e8e9fddc2',
 		'.github/workflows/delivery-doctor.yml':
 			'31df9dc92e92d6ef4725d305426a7d1d8c5124a723a62576c921da0535242fa2',
 		'.github/workflows/preview-alias.yml':
-			'be8b3e7f7f145918e452466d5133320600a1421dd9aecfce322bc38b2058bedd',
+			'cae535f9706b84ace7f84ea7e0bf272eedb4f4f316395e4ff5c04e019b7effc6',
 		'.github/workflows/preview-db.yml':
 			'993326888ae69ac03f42f7493c7446c2206a5ebb150c5198ca8051f9bf31e07f',
 		'.github/workflows/publish-auth.yml':
@@ -165,7 +165,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/irnok': {
 		'.github/workflows/ci.yml':
-			'ac81090e10632d101829ca3ff10058bf5ce4451031d178b5fd2678601e984f83',
+			'c088da7e92a1d650f75307a18dc47d076c71cc842b669de0e6830948a794be87',
 		'.github/workflows/preview-alias.yml':
 			'd5cbdc7f070ebd3db407a0284951bb5d4ec6e3c42613320f413f281e1805b7ce',
 		'.github/workflows/preview-db.yml':
@@ -173,7 +173,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/gg-tracker': {
 		'.github/workflows/ci.yml':
-			'9b6f11d17c710654747d405823f5209ebe2ffa1854ba0cf2a49007dc657ea355',
+			'a5d5f792a396d33082795b0503323b37b96e191af6feb8f6ef3b4ff349fd6134',
 		'.github/workflows/preview-alias.yml':
 			'f7e8e38e6d80ffdecebc6b27740571f169d811bd5a49b73030d20aac57f27e56',
 		'.github/workflows/preview-db.yml':
