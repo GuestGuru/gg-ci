@@ -95,11 +95,11 @@ const policies: Record<string, WorkflowPolicy> = {
 const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	'GuestGuru/gg-share': {
 		'.github/workflows/ci.yml':
-			'e893eb18cacc5ad0be6b698776c0c3bc791990b212b9f240cb5be75b3d3628b5',
+			'd50f42b4379b1d8417b85a4fd0d3191d94b06fa2ee3c128ae94dee4f6806e392',
 		'.github/workflows/preview-alias.yml':
-			'4fcf025addee41bf61c7fb4f844bd8d658d9306c46206d1dd23e889124fcb43c',
+			'ae5c628e2a98c0c4f839ae0c0c0abe7128cb19dde274bf371a405a1064dfcb2a',
 		'.github/workflows/preview-db.yml':
-			'ef72e4279f6f2cfdf4ce7a34ad46900860adc6c76ad217afe7ae8b06aa352ad0',
+			'ff361c70095f8f23ca7d0abc64f6945db477c9fb9b98d487af74ce4dee452086',
 	},
 	'GuestGuru/gg-mcp': {
 		'.github/workflows/ci.yml':
