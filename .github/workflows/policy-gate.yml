@@ -13,7 +13,19 @@ permissions:
 jobs:
   workflow-policy:
     name: workflow-policy
-    runs-on: ubuntu-latest
+    # Runner selection (IT-570). An organization ruleset injects this workflow
+    # into the target repository, so it cannot take inputs -- the label comes
+    # instead from the target repository's `GG_CI_RUNNER` organization
+    # variable, and this public repository names no runner of its own:
+    #   * unset (public repositories, and any repository the variable is not
+    #     shared with) -> `ubuntu-latest`, the GitHub-hosted default;
+    #   * set         -> that self-hosted label.
+    # `schedule` is excluded on purpose: a self-hosted runner may be asleep at
+    # cron time, so scheduled work always stays on GitHub-hosted runners.
+    # Deleting the organization variable moves every caller back to
+    # `ubuntu-latest` in one step -- the emergency brake when the self-hosted
+    # runner is unavailable.
+    runs-on: ${{ (github.event_name != 'schedule' && vars.GG_CI_RUNNER) || 'ubuntu-latest' }}
     # Statikus inventory-ellenőrzés, mért futásidő ~12 mp (IT-278).
     timeout-minutes: 10
     steps:

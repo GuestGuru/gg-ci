@@ -109,15 +109,15 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'3fc6c8a4df55f972e91821f511e3716d78d9517cf4da28d5e37cec6d0e504001',
 		'.github/workflows/neon-preview.yml':
-			'f259b356c74c2f89a7d70206dbb2eb6b36fa79c0bf841d6b735e56c01309e7d2',
+			'2b90ae54788591afcd45febdc59be1489310e5f193687a0744f8b9fd73530fdf',
 		'.github/workflows/policy-gate.yml':
-			'e5e19e5e68c2ed229f391c148f5f8c3676f494106e2c1c6bc85ba6241bf51972',
+			'b5e629a4d70094a37601ce3fa9b2581ebde44c23ba026e0e96cefb6739ca8d78',
 		'.github/workflows/preview-alias.yml':
-			'b1028f339db194a7211a3838bd6e3748d7e690009c108bd8227c02cbce87c61e',
+			'1d033ed8a494df67bf3f514d2b670a862769b5eb5c7755d98b723182b2fc7bc2',
 		'.github/workflows/preview.yml':
-			'72335f79b96f7f76a49d59807266889c8f90c1c98b9e64933151af7d8f2e120b',
+			'0900fc9a8f0ab9719eb70e4aa8feee7c1c55ea3b71518cacee3f68f2aa22a7fc',
 		'.github/workflows/quality-gate.yml':
-			'7c2034e1d46ebcf6f3e80a5cffd5dd68f4f274803ecc301b94354721017bc160',
+			'c17612b20c64accf05bfd1a89d1c33dcf052be450089f79e94a9452f9f2e3893',
 	},
 	'GuestGuru/gg-sales': {
 		'.github/workflows/ci.yml':

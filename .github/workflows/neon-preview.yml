@@ -83,7 +83,18 @@ on:
 
 jobs:
   run:
-    runs-on: ubuntu-latest
+    # Runner selection (IT-570). The label comes from the caller's
+    # `GG_CI_RUNNER` organization variable, so this public repository names no
+    # runner of its own:
+    #   * unset (public repositories, and any repository the variable is not
+    #     shared with) -> `ubuntu-latest`, the GitHub-hosted default;
+    #   * set         -> that self-hosted label.
+    # `schedule` is excluded on purpose: a self-hosted runner may be asleep at
+    # cron time, so scheduled work always stays on GitHub-hosted runners.
+    # Deleting the organization variable moves every caller back to
+    # `ubuntu-latest` in one step -- the emergency brake when the self-hosted
+    # runner is unavailable.
+    runs-on: ${{ (github.event_name != 'schedule' && vars.GG_CI_RUNNER) || 'ubuntu-latest' }}
     # Neon branch-műveletek + Vercel env-írás. A hívók mért mediánja 17-22 mp; a 15 perc a lassú branch-provisioningot is fedi (IT-278).
     timeout-minutes: 15
     steps:
