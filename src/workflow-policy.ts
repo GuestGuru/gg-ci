@@ -159,7 +159,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/publish-auth.yml':
 			'3e435b51a35d0580929b6847e773a3bd1f2406a89cf7e057bffed9e61ab4349d',
 		'.github/workflows/token-expiry.yml':
-			'cd228edc9c8abc0da0f04c085417e17a12ffcb2d4c9e98d198ef1d84a12a3c1c',
+			'25e0fd53ed3c0c84649e8cf8248e0ca9fc2dc94559ffb0ce5c82e0325c6fc531',
 	},
 	'GuestGuru/irnok': {
 		'.github/workflows/ci.yml':
