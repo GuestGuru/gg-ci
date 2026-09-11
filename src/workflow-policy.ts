@@ -121,7 +121,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'1e245fe8a3fc413c1a2b9d30e840e84e78b4c20ab8be0012869d1895c3657bcb',
 		'.github/workflows/preview-alias.yml':
-			'29b1443821e140721ece0a369b7ca67503f2f9d8a6a7441988cce1a74c0ca85d',
+			'6a081c2ec6f3859cb8484aef5752b0393b985a6bd52bfd0fd2d0e79e4bdcafa5',
 	},
 	'GuestGuru/gg-design': {
 		'.github/workflows/registry.yml':
@@ -165,7 +165,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'c088da7e92a1d650f75307a18dc47d076c71cc842b669de0e6830948a794be87',
 		'.github/workflows/preview-alias.yml':
-			'd5cbdc7f070ebd3db407a0284951bb5d4ec6e3c42613320f413f281e1805b7ce',
+			'52a2d83907be3a8e0b16b50c9e3b2d6173a87898b3acdbfd97b2ff4143087d33',
 		'.github/workflows/preview-db.yml':
 			'd2de948bd8611ad452d397412e533f85e183bdc5dc0ad95488c2dcf6936b53e3',
 	},
@@ -173,7 +173,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'a5d5f792a396d33082795b0503323b37b96e191af6feb8f6ef3b4ff349fd6134',
 		'.github/workflows/preview-alias.yml':
-			'f7e8e38e6d80ffdecebc6b27740571f169d811bd5a49b73030d20aac57f27e56',
+			'13ee8171e1a9f6de5f178d5e363dba13bc022b9ef148bc7065e5fe9ff038d3b8',
 		'.github/workflows/preview-db.yml':
 			'5ce68336d44583d84b9389e7565ad6b68456755dbb451b4e1d686ccdb230ebca',
 	},
