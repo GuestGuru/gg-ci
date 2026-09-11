@@ -162,9 +162,13 @@ jobs:
             exit 0
           fi
 
-          echo "deployment-id=$id" >> "$GITHUB_OUTPUT"
-          echo "pr-number=$pr" >> "$GITHUB_OUTPUT"
-          echo "alias-host=${ALIAS_HOST_PATTERN//\{pr\}/$pr}" >> "$GITHUB_OUTPUT"
+          # The git ref travels to the alias step, which re-checks recency there.
+          {
+            echo "deployment-id=$id"
+            echo "pr-number=$pr"
+            echo "alias-host=${ALIAS_HOST_PATTERN//\{pr\}/$pr}"
+            echo "git-ref=$ref"
+          } >> "$GITHUB_OUTPUT"
 
           # IS THIS DEPLOYMENT ALREADY SUPERSEDED?
           #
@@ -187,7 +191,7 @@ jobs:
           # Undecidable (API error, missing ref) means NOT stale. A redundant test
           # run is cheap; a false green is not.
           if [[ -n "$latest" && "$latest" != "$id" ]]; then
-            echo "::notice::Stale deployment ($id); $latest is newer and will run this again. Tests skip."
+            echo "::notice::Stale deployment ($id); $latest is newer and will run this again. Tests skip, and the alias is left alone."
             echo "stale=true" >> "$GITHUB_OUTPUT"
           else
             echo "stale=false" >> "$GITHUB_OUTPUT"
@@ -215,19 +219,50 @@ jobs:
       - if: steps.r.outputs.deployment-id != ''
         run: npm ci
 
+      # ⚠️ A STALE RUN MUST NOT TOUCH THE ALIAS (measured 2026-09-11, IT-780).
+      #
+      # This step used to run on stale deployments too, on the reasoning that
+      # "the newer deployment's run will overwrite it anyway". That holds only
+      # while runs FINISH in the order they start. Since the move to self-hosted
+      # runners (IT-570) they queue: on GuestGuru/tools#141 the newer run
+      # aliased at 09:51:24 and the older one overwrote it at 09:51:32 — eight
+      # seconds later. The pull request was then pinned to a dead deployment
+      # whose preview database had already been destroyed, and its smoke test
+      # reported `HTTP 500` as if the APPLICATION were broken. That is the worst
+      # kind of failure: it points away from the real cause.
+      #
+      # Losing the alias on a stale run costs nothing — the newer run attaches
+      # it seconds later, and the callers' smoke jobs already skip on `stale`.
       - name: Attach alias
         id: alias
-        if: steps.r.outputs.deployment-id != ''
+        if: steps.r.outputs.deployment-id != '' && steps.r.outputs.stale != 'true'
         shell: bash
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           ALIAS_HOST: ${{ steps.r.outputs.alias-host }}
           DEPLOYMENT_ID: ${{ steps.r.outputs.deployment-id }}
+          GIT_REF: ${{ steps.r.outputs.git-ref }}
           VERCEL_PROJECT_ID: ${{ inputs.vercel-project-id }}
           VERCEL_TEAM_ID: ${{ inputs.vercel-team-id }}
           DRY_RUN: ${{ inputs.dry-run }}
         run: |
           set -o pipefail
+
+          # The recency check above ran BEFORE checkout and `npm ci` — roughly
+          # forty seconds ago, and longer when the runner queues. A deployment
+          # that was newest then can be superseded by now, so we re-measure
+          # immediately before writing. This narrows the race to the width of a
+          # single API call; it cannot close it entirely, which is why the
+          # cheaper `stale` guard above stays as well.
+          if [[ -n "$GIT_REF" && "$DRY_RUN" != "true" ]]; then
+            latest=$(curl -s \
+              "https://api.vercel.com/v6/deployments?projectId=${VERCEL_PROJECT_ID}&teamId=${VERCEL_TEAM_ID}&target=preview&limit=1&meta-githubCommitRef=${GIT_REF}" \
+              -H "Authorization: Bearer $VERCEL_TOKEN" | jq -r '.deployments[0].uid // empty')
+            if [[ -n "$latest" && "$latest" != "$DEPLOYMENT_ID" ]]; then
+              echo "::notice::$latest became newer while this run was preparing — leaving the alias alone (IT-780)."
+              exit 0
+            fi
+          fi
 
           args=(
             --alias-host="$ALIAS_HOST"

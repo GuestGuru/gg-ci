@@ -481,7 +481,7 @@ opts out and the caller uses the `preview-url` output instead.
 
 | Output | Meaning |
 |---|---|
-| `preview-url` | `https://<alias-host>`, set once the alias is attached. |
+| `preview-url` | `https://<alias-host>`, set once the alias is attached. Empty on a stale run, which deliberately does not touch the alias. |
 | `pr-number` | Pull request number the deployment belongs to, or empty. |
 | `deployment-id` | Vercel deployment ID, or empty when the run was skipped. |
 | `stale` | `true` when a newer preview deployment already exists for the same git ref. A caller's smoke job should skip on this — the newer deployment's run covers it. |
@@ -517,6 +517,19 @@ jobs:
 ⚠️ A smoke job in the caller must gate on the PR number **and** on `stale` — see the
 `GG smoke gate` pattern in the delivery standard — otherwise a superseded deployment
 can publish a green status for code that is no longer current.
+
+⚠️ **A stale run does not attach the alias** (since 2026-09-11, IT-780). It used to,
+on the reasoning that the newer deployment's run would overwrite it anyway. That
+holds only while runs FINISH in the order they start — and on self-hosted runners
+they queue. Measured on `GuestGuru/tools#141`: the newer run aliased at 09:51:24 and
+an older one overwrote it **eight seconds later**, pinning the pull request to a
+deployment whose preview database had already been destroyed. The smoke test then
+reported `HTTP 500` as if the application were broken — a failure that points away
+from its own cause.
+
+The alias step also re-measures recency immediately before writing, because the
+`stale` decision is taken ~40 seconds earlier (before checkout and `npm ci`), and
+longer still when the runner queues.
 
 #### What the Vercel deployment event actually contains
 
