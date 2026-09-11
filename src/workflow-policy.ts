@@ -97,7 +97,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'd50f42b4379b1d8417b85a4fd0d3191d94b06fa2ee3c128ae94dee4f6806e392',
 		'.github/workflows/preview-alias.yml':
-			'ae5c628e2a98c0c4f839ae0c0c0abe7128cb19dde274bf371a405a1064dfcb2a',
+			'd525a6c7ff25f2ffd9d772a4977c527fa7c308f541e66ca0851b4adb5fcfb151',
 		'.github/workflows/preview-db.yml':
 			'ef72e4279f6f2cfdf4ce7a34ad46900860adc6c76ad217afe7ae8b06aa352ad0',
 	},
@@ -141,7 +141,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'd0fcab0eed04ecb53c55a54e1922b46bca501ec2556193210ba0d824c0f69812',
 		'.github/workflows/preview-alias.yml':
-			'068af7e3da11c303285fbb2a5bc736cc16a0bbb1fd45a2cbf9059df85baba787',
+			'd26d3a471f1cf8b855d942154dc4e3aaadffc0dc5e3c366addea56bc7df956a4',
 	},
 	'GuestGuru/gg-ops': {
 		'.github/workflows/ci.yml':
@@ -153,7 +153,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/delivery-doctor.yml':
 			'6b0a7321ede9910fe153fc46b3f37190e165954070272f08597afb24d71107b7',
 		'.github/workflows/preview-alias.yml':
-			'cae535f9706b84ace7f84ea7e0bf272eedb4f4f316395e4ff5c04e019b7effc6',
+			'02a0ce06d4700750696de9789c42fbd66271de716d787f30138488fc1e4f9c90',
 		'.github/workflows/preview-db.yml':
 			'993326888ae69ac03f42f7493c7446c2206a5ebb150c5198ca8051f9bf31e07f',
 		'.github/workflows/publish-auth.yml':
