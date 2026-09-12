@@ -101,9 +101,9 @@ const policies: Record<string, WorkflowPolicy> = {
 const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	'GuestGuru/ainita': {
 		'.github/workflows/ci.yml':
-			'ea75a22d1a0f709408418f1e08b37fbea5f73b5fae5a081f91695476bef15b84',
+			'038715e4c6eba60f98e16fdb16a0cdf4ca5d5ce90fe93662a24b9029e25a363e',
 		'.github/workflows/preview-db.yml':
-			'd8cf008afb9103a03fa420689aaea1a41c2bfbaa3f6b09f18f6188248c70f60e',
+			'5dd303b6c3e41570faf47d75b0be9303bf1e68526a46bbe36ebd6166f3ae22b9',
 	},
 	'GuestGuru/gg-share': {
 		'.github/workflows/ci.yml':
