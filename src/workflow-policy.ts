@@ -21,6 +21,12 @@ const centralGate =
 	'GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main'
 
 const policies: Record<string, WorkflowPolicy> = {
+	'GuestGuru/ainita': {
+		workflowPath: '.github/workflows/ci.yml',
+		requiredNeeds: ['ci'],
+		uses: centralGate,
+		statusContext: 'GG deployment gate',
+	},
 	'GuestGuru/gg-sales': {
 		workflowPath: '.github/workflows/ci.yml',
 		requiredNeeds: ['ci'],
@@ -93,6 +99,12 @@ const policies: Record<string, WorkflowPolicy> = {
 }
 
 const approvedWorkflowInventories: Record<string, Record<string, string>> = {
+	'GuestGuru/ainita': {
+		'.github/workflows/ci.yml':
+			'ea75a22d1a0f709408418f1e08b37fbea5f73b5fae5a081f91695476bef15b84',
+		'.github/workflows/preview-db.yml':
+			'd8cf008afb9103a03fa420689aaea1a41c2bfbaa3f6b09f18f6188248c70f60e',
+	},
 	'GuestGuru/gg-share': {
 		'.github/workflows/ci.yml':
 			'd50f42b4379b1d8417b85a4fd0d3191d94b06fa2ee3c128ae94dee4f6806e392',
@@ -155,7 +167,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'ed521bde7f4ef2305e69f66a1659ee55d59bd7f0e669e0a7337f5d4e8e9fddc2',
 		'.github/workflows/delivery-doctor.yml':
-			'6b0a7321ede9910fe153fc46b3f37190e165954070272f08597afb24d71107b7',
+			'46a6f754476399e6015a81bffb32eec7230df34a8f966a4cd805a85a9e5d09ea',
 		'.github/workflows/preview-alias.yml':
 			'02a0ce06d4700750696de9789c42fbd66271de716d787f30138488fc1e4f9c90',
 		'.github/workflows/preview-db.yml':
