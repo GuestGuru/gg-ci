@@ -102,6 +102,8 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	'GuestGuru/ainita': {
 		'.github/workflows/ci.yml':
 			'038715e4c6eba60f98e16fdb16a0cdf4ca5d5ce90fe93662a24b9029e25a363e',
+		'.github/workflows/preview-alias.yml':
+			'81b06b6ad66224651b36c4923eb448105f5849e99275c554dc9bdf7c94d455be',
 		'.github/workflows/preview-db.yml':
 			'5dd303b6c3e41570faf47d75b0be9303bf1e68526a46bbe36ebd6166f3ae22b9',
 	},
