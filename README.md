@@ -484,7 +484,7 @@ opts out and the caller uses the `preview-url` output instead.
 | `preview-url` | `https://<alias-host>`, set once the alias is attached. Empty on a stale run, which deliberately does not touch the alias. |
 | `pr-number` | Pull request number the deployment belongs to, or empty. |
 | `deployment-id` | Vercel deployment ID, or empty when the run was skipped. |
-| `stale` | `true` when a newer preview deployment already exists for the same git ref. A caller's smoke job should skip on this — the newer deployment's run covers it. |
+| `stale` | `true` when a newer preview deployment already exists for the same git ref. A caller's smoke job should skip on this — the newer deployment's run covers it. TWO checks feed it: a cheap one before checkout, and a second one immediately before the alias write, which catches a deployment that became newer in between (IT-810). |
 
 #### Caller example
 
@@ -517,6 +517,13 @@ jobs:
 ⚠️ A smoke job in the caller must gate on the PR number **and** on `stale` — see the
 `GG smoke gate` pattern in the delivery standard — otherwise a superseded deployment
 can publish a green status for code that is no longer current.
+
+Do **not** additionally gate on `preview-url` being non-empty. That would also swallow
+the real failure — an alias that never got attached — and the smoke job's whole job is
+to catch exactly that. Gating on `stale` is enough: a run that deliberately leaves the
+alias alone always reports `stale=true`, both from the early check and from the late one
+(this was the IT-810 bug: the late branch stayed silent, so callers smoke-tested an empty
+URL and wrote a red status onto a healthy commit).
 
 ⚠️ **A stale run does not attach the alias** (since 2026-09-11, IT-780). It used to,
 on the reasoning that the newer deployment's run would overwrite it anyway. That
