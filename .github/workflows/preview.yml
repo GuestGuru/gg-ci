@@ -121,7 +121,18 @@ jobs:
       pr-number: ${{ steps.r.outputs.pr-number }}
       deployment-id: ${{ steps.r.outputs.deployment-id }}
       alias-host: ${{ steps.r.outputs.alias-host }}
-      stale: ${{ steps.r.outputs.stale }}
+      # TWO recency checks feed this output, and BOTH have to reach the callers.
+      # The cheap one in `r` runs before checkout; the second runs inside `alias`,
+      # immediately before the write, and catches a deployment that became newer
+      # in between. Until IT-810 only the first was propagated: the late branch
+      # left the alias alone (correctly) but still reported `stale=false`, so the
+      # caller ran its smoke job against an empty `preview-url` and wrote a red
+      # status onto a commit that was fine (GuestGuru/gg-ops#16, 2026-09-14).
+      #
+      # `||` yields the first non-empty operand. `alias` writes `stale` only on
+      # its late branch, and it does not run at all when `r` already said `true`,
+      # so the two sources cannot disagree.
+      stale: ${{ steps.alias.outputs.stale || steps.r.outputs.stale }}
       preview-url: ${{ steps.alias.outputs.preview-url }}
     steps:
       - id: r
@@ -260,6 +271,11 @@ jobs:
               -H "Authorization: Bearer $VERCEL_TOKEN" | jq -r '.deployments[0].uid // empty')
             if [[ -n "$latest" && "$latest" != "$DEPLOYMENT_ID" ]]; then
               echo "::notice::$latest became newer while this run was preparing — leaving the alias alone (IT-780)."
+              # Tell the callers as well. We leave without attaching the alias,
+              # so `preview-url` stays empty; a smoke job that still ran would
+              # measure nothing and report the failure as an application bug
+              # (IT-810). The newer deployment's own run covers this commit.
+              echo "stale=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
           fi
