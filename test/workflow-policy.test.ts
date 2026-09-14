@@ -98,7 +98,7 @@ describe('workflow policy', () => {
 			'.github/workflows/preview-alias.yml':
 				'97455ebc65e13a6914c2289f5629555cf4a58f92b846d69cd48a56f5ffaa51a4',
 			'.github/workflows/preview-db.yml':
-				'edd747d667dd7d76f79b758a14a1a44216c8794789eddbe5cf1a08b47b08d1fa',
+				'bf585bdebf555f5a4084c2f62024d2e8185665a12c98408898d5351b6c609fd1',
 		})
 	})
 
