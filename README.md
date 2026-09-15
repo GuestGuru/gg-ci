@@ -548,8 +548,12 @@ these events directly will hit them again.
 
 - **`deployment.ref` is a commit SHA, not a branch name.** `gh pr list --head "$REF"`
   therefore matches nothing and the alias job is skipped — silently, since "no PR
-  found" is a legitimate outcome for a non-PR deployment. Resolve the PR through
-  `repos/{owner}/{repo}/commits/{sha}/pulls` instead.
+  found" is a legitimate outcome for a non-PR deployment. `preview.yml` does not
+  resolve the PR from the git ref at all: it reads `meta.githubPrId` out of the same
+  `GET /v13/deployments/{hostname}` response it already needs for the deployment id —
+  measured 2026-07-25 on 18 preview deployments across six projects, present on every
+  one. A GitHub-side lookup (`repos/{owner}/{repo}/commits/{sha}/pulls`) also works,
+  but costs an extra round-trip and an extra token scope.
 - **`deployment.payload` is an empty object (`{}`).** There is no `deploymentId`
   in it, so passing `deployment.payload.deploymentId` sends an empty string and
   `alias-set` fails with `Missing required argument: --deployment-id`. The
