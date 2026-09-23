@@ -116,7 +116,10 @@ Mérve ma: az org-ruleset (a „default branch delivery gate") **12 repót** fed
 `quality-gate / verify`, és a `policy-gate.yml` pinje a `main` HEAD-jén áll
 (nincs elavult pin). Egy második ruleset a `GG smoke gate` commit statust követeli
 meg 10 repón (a `gg-ci` és a `gg-mcp` nélkül). A privát repók CI-ja saját
-(self-hosted) runneren fut, a publikus gg-ci sajátja a felhőben; a takarék-kapcsoló
+(self-hosted) runneren fut, a publikus gg-ci sajátja a felhőben — **két kivétellel**
+(mérve 2026-09-23, a `runs-on` sorokból): a `gg-sales` `ci` jobja
+`blacksmith-8vcpu-ubuntu-2404`-en, a `BPDBv2` mindhárom workflow-ja
+`blacksmith-2vcpu-ubuntu-2404`-en fut; a takarék-kapcsoló
 (`GG_CI_STANDBY`) ma nincs beállítva, tehát normál mód van. A `preview-alias.yml`
 2026-09-10 óta nincs (hívó nélkül maradt, IT-761). `npm test`: 140/140 zöld.
 A repó 99 commitja túlnyomórészt jóváhagyott hash-bővítés — a mai szerkezet
