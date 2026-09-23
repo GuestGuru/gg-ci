@@ -115,6 +115,12 @@ A repó térképe:
   előtt, `PREVIEW_DB_ISOLATED` és a PR migrációi nélkül — a recency ezt nem látja,
   mert a redeploy még nem létezik. A deployment `env` névlistája (a `GET
   /v13/deployments/{host}` válaszban) a bizonyíték; flag nélkül a futás `stale`.
+  **Lezárt PR-re sem ír aliast** (IT-975): a zárás `unalias` futása és egy korábban
+  indult `deployment_status` futás ugyanabban a sorban cserélhet helyet (gg-sales#43,
+  #54 — a lezárt PR hosztja a projekten maradt, IT-970), ezért az `Attach alias` az
+  írás előtt a `pulls/{n}` `.state`-jét is méri: `closed` → nincs alias, `stale=true`;
+  olvashatatlan állapot = nyitott (a hiányzó smoke gate rosszabb, mint egy hoszt,
+  amit a doctor másnap kimér).
 - **Minden action-referencia SHA-ra van pinelve** (IT-277), és a policy-evaluátorok
   üres `NODE_OPTIONS`-szel, `npm ci --ignore-scripts --userconfig=/dev/null`-lal
   futnak: a cél-repó npm-konfigurációja nem kerülhet a bizalmi útvonalba.

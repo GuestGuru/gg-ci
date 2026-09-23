@@ -355,6 +355,10 @@ jobs:
         shell: bash
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          # For the pull request state check below (IT-975); the caller's job
+          # already grants `pull-requests: write` for the comment step.
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.r.outputs.pr-number }}
           ALIAS_HOST: ${{ steps.r.outputs.alias-host }}
           DEPLOYMENT_ID: ${{ steps.r.outputs.deployment-id }}
           GIT_REF: ${{ steps.r.outputs.git-ref }}
@@ -363,6 +367,39 @@ jobs:
           DRY_RUN: ${{ inputs.dry-run }}
         run: |
           set -o pipefail
+
+          # THE PULL REQUEST MAY HAVE BEEN CLOSED WHILE THIS RUN WAITED (IT-975).
+          #
+          # `unalias` runs on `pull_request: closed` and detaches the domain. A
+          # `deployment_status` run that STARTED before the close but reached
+          # this point after it would re-attach the alias — and from then on the
+          # closed pull request's link shows a live preview, its host stays on
+          # the Vercel project, and its certificate keeps renewing (IT-969).
+          # Measured 2026-09-23 on GuestGuru/gg-sales#54 (unalias at 14:09:59,
+          # this step aliased at 14:10:19) and #43 (unalias at 17:16:52, aliased
+          # at 17:17:13, from a run started at 17:15:09): in the self-hosted
+          # queue finishing order is not starting order — the IT-780 mechanism.
+          # The recency check below cannot see it: the deployment is still the
+          # newest one for its ref.
+          #
+          # So the pull request's state is measured here, immediately before the
+          # write. `closed` (merged or not) means no alias and `stale=true`, so
+          # the caller's smoke skips exactly as on a superseded deployment. This
+          # narrows the race to one API call and cannot close it; the daily
+          # `preview-hosztok` measurement (IT-970) covers the remainder.
+          #
+          # Undecidable (API error, no state field) means open, like every other
+          # undecidable case in this workflow: a leftover host is a doctor
+          # finding the next morning, a skipped smoke on a healthy pull request
+          # is a missing required status and a silently BLOCKED merge.
+          if [[ "$DRY_RUN" != "true" && "$PR" =~ ^[0-9]+$ ]]; then
+            state=$( { gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}" --jq '.state // empty' 2>/dev/null || true; } )
+            if [[ "$state" == "closed" ]]; then
+              echo "::notice::Pull request #$PR is closed — leaving the alias alone (IT-975); its unalias run has detached (or is detaching) the domain."
+              echo "stale=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
 
           # The recency check above ran BEFORE checkout and `npm ci` — roughly
           # forty seconds ago, and longer when the runner queues. A deployment

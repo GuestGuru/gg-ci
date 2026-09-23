@@ -174,6 +174,12 @@ three-step release operation:
 3. **Close/reopen the target pull request** so the policy runs again under the fresh pin.
    A plain re-run does not help — `ref: ${{ job.workflow_sha }}` inherits the old pin.
 
+Steps 2 and 3 are one command in `GuestGuru/tools` (`packages/delivery-doctor`):
+`pnpm chain release --dry-run`, then `pnpm chain release` — it re-pins only when
+`src/`, `.github/workflows/` or a root `package*.json` changed since the current pin,
+then closes/reopens every open pull request in the ruleset's repositories and prints a
+summary table.
+
 Changing `gg-ci`'s own `.github/workflows/` files needs one extra turn of the same crank,
 since the trusted checkout also carries the inventory that approves them: pin the ruleset
 to the reviewed candidate SHA, verify, merge, then pin to the resulting main SHA.
@@ -587,6 +593,21 @@ from its own cause.
 The alias step also re-measures recency immediately before writing, because the
 `stale` decision is taken ~40 seconds earlier (before checkout and `npm ci`), and
 longer still when the runner queues.
+
+⚠️ **A run for a closed pull request does not attach the alias either** (since IT-975).
+The same queue reorders a `deployment_status` run against the `unalias` run of the
+PR's close: a run that started before the close and reached the alias step after it
+re-attached the host, and from then on the closed PR's link showed a live preview, the
+host stayed on the Vercel project and its certificate kept renewing (IT-969).
+Measured on `GuestGuru/gg-sales#54` (unalias at 14:09:59, aliased at 14:10:19) and
+`#43` (unalias at 17:16:52, aliased at 17:17:13 from a run started at 17:15:09), both
+2026-09-23. Recency cannot catch it — the deployment is still the newest for its ref —
+so the alias step now reads the PR's state (`GET /repos/{owner}/{repo}/pulls/{n}`,
+with the caller's `github.token`) immediately before writing: `closed` means no alias
+and `stale=true`, so the caller's smoke skips as on a superseded deployment. An
+unreadable state counts as open, like every undecidable case here. The window is
+narrowed to one API call, not closed; the daily `preview-hosztok` measurement in
+`tools/packages/delivery-doctor` (IT-970) reports what slips through.
 
 ⚠️ **With a per-PR database, pass `preview-db: true`** (since IT-913). The first
 deployment of a new pull request is built by the push — before the PR is opened, and
