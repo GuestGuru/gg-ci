@@ -82,6 +82,11 @@ A repó térképe:
   (IT-971). A default `~/setup-pnpm` a két runner-példány közös HOME-jában van, az
   action pedig minden jobban törli és újratelepíti, így két egyszerre induló job
   egymás alól törli a pnpm-et. Hívói hash jóváhagyásakor ezt is nézd meg.
+- **Saját runneren a `services:` konténer nem köthet fix host-portot** (IT-924). A két
+  runner-példány közös Docker-daemont használ: `5432:5432` mellett két párhuzamos job
+  közül a második `docker start`-ja bukik, és a main `GG deployment gate`-je is elesett
+  már. Helyesen `ports: - 5432`, az elérés `localhost:${{ job.services.<név>.ports['5432'] }}`
+  (a job a hoszton fut, nincs `container:`). Hívói hash jóváhagyásakor ezt is nézd meg.
 - **Elavult (`stale`) preview-futás nem nyúl az aliashoz** (IT-780) — a sorban álló
   futások befejezési sorrendje megfordulhat, és a felülírt alias halott deploymentre
   mutatna. A `stale` outputot **két** mérés táplálja: egy olcsó a checkout előtt, egy
