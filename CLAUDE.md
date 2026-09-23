@@ -96,6 +96,15 @@ A repó térképe:
   már. Helyesen `ports: - 5432`, az elérés `localhost:${{ job.services.<név>.ports['5432'] }}`
   (a job a hoszton fut, nincs `container:`). Hívói hash jóváhagyásakor ezt is nézd meg —
   ezt a policy (IT-974) NEM ellenőrzi.
+- **A deploy UTÁN nyíló PR-t a `preview.yml` ≤2 percig várja** (IT-983): a Vercel
+  `meta.githubPrId` a deployment létrehozásakor rögzül, a `deployment_status` a READY-nél
+  tüzel, és DB nélküli appon (gg-design) nincs második futás — a smoke kimaradt, a
+  kötelező `GG smoke gate` sosem jött, a PR némán BLOCKED. Üres `githubPrId`-nál a `r`
+  lépés a GitHub `commits/{deployment.sha}/pulls` végpontját méri 12 × 10 s-ig (mérve:
+  a READY után nyíló PR-ek 58/62-je 60 s-on belül, 60–190 s között nincs eset). A
+  határon túl DB-s appon az `ensure` redeployja pótol, gg-designon csak új deployment.
+  Hiányzó smoke gate-nél **előbb a runner-sort mérd** (jobs API `started_at`; p50 87 s,
+  p90 15 perc), ne retrigger-commitot pusholj.
 - **Elavult (`stale`) preview-futás nem nyúl az aliashoz** (IT-780) — a sorban álló
   futások befejezési sorrendje megfordulhat, és a felülírt alias halott deploymentre
   mutatna. A `stale` outputot **két** mérés táplálja: egy olcsó a checkout előtt, egy

@@ -144,6 +144,12 @@ jobs:
         shell: bash
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          # For the GitHub-side pull request lookup below (IT-983). The caller's
+          # job already grants `pull-requests: write` for the comment step.
+          GH_TOKEN: ${{ github.token }}
+          # The commit this deployment was built from — GitHub's own view of it,
+          # so the PR lookup does not depend on Vercel's metadata being there.
+          DEPLOYMENT_SHA: ${{ github.event.deployment.sha }}
           VERCEL_PROJECT_ID: ${{ inputs.vercel-project-id }}
           VERCEL_TEAM_ID: ${{ inputs.vercel-team-id }}
           ALIAS_HOST_PATTERN: ${{ inputs.alias-host-pattern }}
@@ -172,10 +178,61 @@ jobs:
             exit 0
           fi
 
+          # THE PULL REQUEST MAY NOT EXIST YET (IT-983).
+          #
+          # `meta.githubPrId` is written when Vercel creates the deployment — from
+          # the push. A pull request opened AFTER that push is not in it, and this
+          # event fires at READY, so the run that reaches this point may be the
+          # only run this commit ever gets: on an app without a per-PR database
+          # no redeploy follows, nothing re-triggers `deployment_status`, the
+          # caller's smoke job never starts, and the required `GG smoke gate`
+          # status never arrives. Every other check is green and the merge is
+          # BLOCKED with nothing pointing at the cause (GuestGuru/gg-design#119,
+          # 2026-09-23: READY 15:59:22, PR opened 16:18:16, this run said
+          # "does not belong to a pull request").
+          #
+          # Measured 2026-09-23 on the last 100 preview deployments of ten
+          # projects (381 branches): in 209 the PR was opened after its first
+          # deployment was created (p50 20 s, p90 46 s after), in 62 after that
+          # deployment was READY — 58 of those within 60 s, then nothing until
+          # 192 s, and single cases at 310 s, 19 min and 107 min. Two minutes of
+          # polling therefore covers the cluster with 2x headroom; the outliers
+          # cannot be covered by waiting at all (an empty push or, on apps with
+          # a per-PR database, `neon-preview ensure`'s redeploy handles them).
+          #
+          # GitHub is asked, not Vercel: `commits/{sha}/pulls` is the source of
+          # truth for "which open PR has this commit". Vercel does backfill
+          # `githubPrId` onto existing deployments when the PR opens (measured
+          # on all 209), but that is undocumented behaviour, and the SHA comes
+          # from the event itself. Twelve probes ten seconds apart; a failed
+          # probe counts as "not yet", never as an error — a non-PR deployment
+          # remains a legitimate, quiet outcome.
+          if [[ -z "$pr" ]]; then
+            sha=${DEPLOYMENT_SHA:-$(printf '%s' "$dep" | jq -r '.meta.githubCommitSha // empty')}
+            # Event data goes into a URL path: accept nothing but a commit SHA.
+            [[ "$sha" =~ ^[0-9a-f]{7,40}$ ]] || sha=""
+            if [[ -n "$sha" ]]; then
+              for attempt in $(seq 1 12); do
+                # A failed call (or an error object instead of the array) must
+                # read as "not yet": this step runs under `set -e`.
+                pr=$( { gh api "repos/${GITHUB_REPOSITORY}/commits/${sha}/pulls" 2>/dev/null || true; } \
+                      | jq -r --arg ref "$ref" '
+                          (if type == "array" then . else [] end)
+                          | [ .[] | select(.state == "open") | select($ref == "" or .head.ref == $ref) ]
+                          | .[0].number // empty' 2>/dev/null || true)
+                if [[ -n "$pr" ]]; then
+                  echo "::notice::$host was deployed before pull request #$pr existed — found it on probe $attempt (IT-983)."
+                  break
+                fi
+                if (( attempt < 12 )); then sleep 10; fi
+              done
+            fi
+          fi
+
           # Direct branch pushes produce previews with no pull request. There is
           # nobody to link, so there is nothing to do.
           if [[ -z "$pr" ]]; then
-            echo "::notice::$host does not belong to a pull request — skipping."
+            echo "::notice::$host does not belong to a pull request (none opened within two minutes) — skipping."
             exit 0
           fi
 
