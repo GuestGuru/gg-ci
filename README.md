@@ -128,6 +128,23 @@ setup-node v5 from switching caching back on by itself when the workspace's
 `package.json` has a `packageManager` field. A caller's own jobs that always run on
 self-hosted runners should leave `cache:` out for the same reason.
 
+#### pnpm installs into `runner.temp` on self-hosted runners
+
+`pnpm/action-setup` installs pnpm into its `dest` input, `~/setup-pnpm` by default,
+and on every run it first deletes that directory and reinstalls. Several
+self-hosted runner instances under one user share a `HOME`, so two jobs starting
+together delete each other's pnpm mid-job (`ENOTEMPTY … rmdir '~/setup-pnpm/node_modules'`,
+or a pnpm worker exiting during `pnpm install`). A caller's pnpm step on a
+self-hosted runner therefore sets a per-instance, per-job directory:
+
+```yaml
+- uses: pnpm/action-setup@<sha>
+  with:
+    dest: ${{ runner.temp }}/setup-pnpm
+```
+
+It costs nothing: the action reinstalls on every run anyway (measured 0–1 s).
+
 ### Releasing a policy change
 
 The organization ruleset must pin this required workflow to an immutable commit `sha`,
