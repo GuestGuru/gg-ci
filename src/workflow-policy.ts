@@ -304,7 +304,9 @@ export function collectCentralTrustHashes(
 	return hashes
 }
 
-export function collectWorkflowInventory(
+// Every file in .github/workflows, path → content. The hash inventory and the
+// gg-runner invariants (IT-974) both read from this one listing.
+export function collectWorkflowSources(
 	targetRoot: string,
 ): Record<string, string> {
 	const workflowDirectory = join(targetRoot, '.github/workflows')
@@ -313,12 +315,148 @@ export function collectWorkflowInventory(
 			.filter((entry) => entry.isFile())
 			.map((entry) => {
 				const relativePath = `.github/workflows/${entry.name}`
-				return [
-					relativePath,
-					hashWorkflow(readFileSync(join(targetRoot, relativePath), 'utf8')),
-				]
+				return [relativePath, readFileSync(join(targetRoot, relativePath), 'utf8')]
 			}),
 	)
+}
+
+export function hashWorkflowSources(
+	sources: Record<string, string>,
+): Record<string, string> {
+	return Object.fromEntries(
+		Object.entries(sources).map(([path, content]) => [path, hashWorkflow(content)]),
+	)
+}
+
+export function collectWorkflowInventory(
+	targetRoot: string,
+): Record<string, string> {
+	return hashWorkflowSources(collectWorkflowSources(targetRoot))
+}
+
+// --- gg-runner invariánsok (IT-974) -----------------------------------------
+//
+// Két, mérésből született szabály minden olyan jobra, ami a GG saját
+// (self-hosted) runnerén fut — a `runs-on` a `gg-runner` címkét vagy a
+// `vars.GG_CI_RUNNER` kifejezést tartalmazza:
+//
+//   1. IT-966: az `actions/setup-node` lépésben nincs `cache:` (a perzisztens
+//      runner ~/.npm-je jobról jobra megmarad, a GitHub-cache visszaállítása
+//      ott 1,07 GB letöltés volt, a jobidő 70–80%-a). Az egyetlen megengedett
+//      `cache:` a gg-ci saját workflow-inak feltételes alakja, mert ugyanaz a
+//      job a vészfék (a GG_CI_RUNNER törlése) után felhős runnerre kerül, ahol
+//      a cache hasznos. A `package-manager-cache: false` ott kötelező, ahol a
+//      cél-repó gyökér `package.json`-ja `packageManager`-t (vagy
+//      `devEngines.packageManager`-t) deklarál — a setup-node v5 pontosan
+//      ebből kapcsolja vissza magától a cache-t `cache:` nélkül is (mérve
+//      2026-09-23: tools, gg-tracker). Ahol nincs ilyen mező, a sor hatástalan,
+//      ezért nem követeljük; a mező felvétele viszont a policy-t azonnal
+//      elbuktatja, amíg a workflow nem tiltja le a cache-t.
+//   2. IT-971: a `pnpm/action-setup` lépésben `dest: ${{ runner.temp }}/setup-pnpm`.
+//      A default `~/setup-pnpm` a két runner-példány közös HOME-jában van, és az
+//      action minden futáskor törli és újratelepíti — két egyszerre induló job
+//      egymás alól törölte a pnpm-et.
+//
+// A szabály minden inventory-fájlra fut (nem csak a hívó ci.yml-re), és
+// fail-closed: a sértés a hash-jóváhagyás pillanatában ad hibát, nem a runneren.
+// Egy reusable-hívás (`uses:` job-szinten, nincs `steps`) nem érintett — annak
+// a jobjait a hívott workflow saját inventoryja fedi.
+
+const GG_RUNNER_LABEL = 'gg-runner'
+const GG_RUNNER_VARIABLE = 'GG_CI_RUNNER'
+const CONDITIONAL_NPM_CACHE =
+	"${{ runner.environment == 'github-hosted' && 'npm' || '' }}"
+const PNPM_DEST = '${{ runner.temp }}/setup-pnpm'
+
+function mentionsGgRunner(value: unknown): boolean {
+	if (typeof value === 'string') {
+		return value.includes(GG_RUNNER_LABEL) || value.includes(GG_RUNNER_VARIABLE)
+	}
+	if (Array.isArray(value)) return value.some(mentionsGgRunner)
+	const record = asRecord(value)
+	// `runs-on: { group: …, labels: … }` alak.
+	return record ? mentionsGgRunner(record.labels) : false
+}
+
+function usesAction(step: UnknownRecord, action: string): boolean {
+	const uses = step.uses
+	return typeof uses === 'string' && (uses === action || uses.startsWith(`${action}@`))
+}
+
+export type WorkflowSourcesEvidence = {
+	// Path → content of every file in the target's .github/workflows.
+	sources: Record<string, string>
+	// True when the target's root package.json declares `packageManager` or
+	// `devEngines.packageManager` — the trigger of setup-node v5's automatic
+	// cache. Fail-closed: an unreadable package.json counts as declared.
+	packageManagerDeclared: boolean
+}
+
+export function packageJsonDeclaresPackageManager(targetRoot: string): boolean {
+	let content: string
+	try {
+		content = readFileSync(join(targetRoot, 'package.json'), 'utf8')
+	} catch {
+		// No root package.json (e.g. a monorepo with per-directory packages):
+		// setup-node has nothing to detect from.
+		return false
+	}
+	try {
+		const packageJson = asRecord(JSON.parse(content))
+		return (
+			packageJson?.packageManager !== undefined ||
+			asRecord(packageJson?.devEngines)?.packageManager !== undefined
+		)
+	} catch {
+		return true
+	}
+}
+
+export function validateRunnerInvariants(
+	evidence: WorkflowSourcesEvidence,
+): string[] {
+	const { sources, packageManagerDeclared } = evidence
+	const errors: string[] = []
+	for (const path of Object.keys(sources).sort()) {
+		let workflow: unknown
+		try {
+			workflow = parse(sources[path] ?? '')
+		} catch {
+			errors.push(`Workflow YAML is invalid: ${path}`)
+			continue
+		}
+		const jobs = asRecord(asRecord(workflow)?.jobs) ?? {}
+		for (const jobName of Object.keys(jobs).sort()) {
+			const job = asRecord(jobs[jobName])
+			if (!job || !mentionsGgRunner(job['runs-on'])) continue
+			const steps = Array.isArray(job.steps) ? job.steps : []
+			steps.forEach((rawStep, index) => {
+				const step = asRecord(rawStep)
+				if (!step) return
+				const where = `${path}: job ${jobName} runs on gg-runner, so step ${index + 1}`
+				const inputs = asRecord(step.with) ?? {}
+				if (usesAction(step, 'actions/setup-node')) {
+					const cache = inputs.cache
+					if (cache !== undefined && cache !== '' && cache !== CONDITIONAL_NPM_CACHE) {
+						errors.push(
+							`${where} (actions/setup-node) must not set cache: — the persistent runner keeps ~/.npm and the pnpm store between jobs, restoring the GitHub cache there only re-downloads them (IT-966); remove the cache: line, or use exactly ${CONDITIONAL_NPM_CACHE} in a job that can also land on a GitHub-hosted runner`,
+						)
+					}
+					if (packageManagerDeclared && inputs['package-manager-cache'] !== false) {
+						errors.push(
+							`${where} (actions/setup-node) must set package-manager-cache: false — this repository's package.json declares a packageManager, from which setup-node v5 switches the GitHub cache back on by itself (IT-966)`,
+						)
+					}
+				}
+				if (usesAction(step, 'pnpm/action-setup') && inputs.dest !== PNPM_DEST) {
+					errors.push(
+						`${where} (pnpm/action-setup) must set with.dest: ${PNPM_DEST} — the default ~/setup-pnpm is shared by the runner instances' common HOME, and the action deletes and reinstalls it on every run, so two jobs starting together remove each other's pnpm (IT-971)`,
+					)
+				}
+			})
+		}
+	}
+	return errors
 }
 
 function validateWorkflowInventory(
@@ -395,6 +533,9 @@ export function validateWorkflowPolicy(
 	workflowYaml: string,
 	actualInventory: Record<string, string>,
 	centralTrust?: CentralTrustEvidence,
+	// Every workflow file's content plus the package.json evidence; when given,
+	// the gg-runner invariants (IT-974) run on all of them. `run` always passes it.
+	workflowSources?: WorkflowSourcesEvidence,
 ): string[] {
 	const policy = policyForRepository(repository)
 	if (!policy) return [`No workflow policy is configured for ${repository}`]
@@ -429,6 +570,7 @@ export function validateWorkflowPolicy(
 	return [
 		...errors,
 		...validateWorkflowInventory(expectedInventory, actualInventory),
+		...(workflowSources ? validateRunnerInvariants(workflowSources) : []),
 		...centralErrors,
 	]
 }
@@ -581,11 +723,16 @@ export function run(
 
 	const targetRoot = argv[0] ?? '.'
 	let workflowYaml: string
+	let workflowSources: WorkflowSourcesEvidence
 	let actualInventory: Record<string, string>
 	let centralTrust: CentralTrustEvidence | undefined
 	try {
 		workflowYaml = readFileSync(join(targetRoot, policy.workflowPath), 'utf8')
-		actualInventory = collectWorkflowInventory(targetRoot)
+		workflowSources = {
+			sources: collectWorkflowSources(targetRoot),
+			packageManagerDeclared: packageJsonDeclaresPackageManager(targetRoot),
+		}
+		actualInventory = hashWorkflowSources(workflowSources.sources)
 		if (repository === 'GuestGuru/gg-ci') {
 			const manifestContent = readFileSync(
 				join(targetRoot, 'src/trust-inventory.json'),
@@ -618,6 +765,7 @@ export function run(
 		workflowYaml,
 		actualInventory,
 		centralTrust,
+		workflowSources,
 	)
 	if (errors.length === 0) {
 		console.log(`workflow-policy: ${repository} uses the canonical quality gate`)

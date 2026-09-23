@@ -9,7 +9,9 @@ import {
 	policySourceLine,
 	resolvePolicySource,
 	run,
+	packageJsonDeclaresPackageManager,
 	stalePinDiagnosis,
+	validateRunnerInvariants,
 	validateWorkflowPolicy,
 	workflowInventoryForRepository,
 } from '../src/workflow-policy.js'
@@ -319,6 +321,171 @@ jobs:
 // commiton áll, a CÉL-repo azt látja, hogy „Workflow content is not approved",
 // miközben a tartalom jóvá VAN hagyva. A tünet a cél-repóban van, az ok a
 // gg-ci-ben; a rerun sem segít (a `ref: job.workflow_sha` a régi sha-t örökli).
+// IT-974: a gg-runner invariánsok (IT-966 setup-node cache, IT-971 pnpm dest)
+// minden inventory-fájl minden gg-runneres jobjára, nem csak a hívó ci.yml-re.
+describe('gg-runner invariants (IT-974)', () => {
+	const conditionalCache =
+		"${{ runner.environment == 'github-hosted' && 'npm' || '' }}"
+	const pnpmDest = '${{ runner.temp }}/setup-pnpm'
+
+	// Egy gg-runneres job a mai, jóváhagyott alakkal: setup-node cache nélkül,
+	// package-manager-cache: false, pnpm dest a runner.temp alatt.
+	const job = (runsOn: string, steps: string) => `
+jobs:
+  build:
+    runs-on: ${runsOn}
+    steps:
+      - uses: actions/checkout@abc
+${steps}
+`
+	const setupNode = (withLines: string) => `      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: 24
+${withLines}`
+	const pnpm = (withLines: string) => `      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+${withLines}`
+
+	const validate = (
+		yaml: string,
+		packageManagerDeclared = true,
+		path = '.github/workflows/ci.yml',
+	) => validateRunnerInvariants({ sources: { [path]: yaml }, packageManagerDeclared })
+
+	it('accepts the approved shape on a string and an array runs-on', () => {
+		const steps =
+			pnpm(`        with:\n          dest: ${pnpmDest}\n`) +
+			setupNode('          package-manager-cache: false\n')
+		expect(validate(job('[self-hosted, gg-runner]', steps))).toEqual([])
+		expect(validate(job('gg-runner', steps))).toEqual([])
+		expect(
+			validate(job("${{ (github.event_name != 'schedule' && vars.GG_CI_RUNNER) || 'ubuntu-latest' }}", steps)),
+		).toEqual([])
+	})
+
+	it('accepts the conditional cache expression the gg-ci workflows use', () => {
+		const steps = setupNode(
+			`          cache: ${conditionalCache}\n          package-manager-cache: false\n`,
+		)
+		expect(
+			validate(job("${{ (github.event_name != 'schedule' && vars.GG_CI_RUNNER) || 'ubuntu-latest' }}", steps)),
+		).toEqual([])
+		expect(validate(job('[self-hosted, gg-runner]', steps))).toEqual([])
+	})
+
+	it('rejects a cache: input on a gg-runner setup-node step (IT-966)', () => {
+		const steps = setupNode('          cache: npm\n          package-manager-cache: false\n')
+		const errors = validate(job('[self-hosted, gg-runner]', steps))
+		expect(errors).toHaveLength(1)
+		expect(errors[0]).toContain(
+			'.github/workflows/ci.yml: job build runs on gg-runner, so step 2 (actions/setup-node) must not set cache:',
+		)
+		expect(errors[0]).toContain('(IT-966)')
+		expect(errors[0]).toContain(conditionalCache)
+		// Egy másik feltételes kifejezés sem megy át: csak a pontos alak.
+		expect(
+			validate(job('gg-runner', setupNode("          cache: ${{ runner.os == 'Linux' && 'npm' || '' }}\n          package-manager-cache: false\n"))),
+		).toHaveLength(1)
+	})
+
+	it('requires package-manager-cache: false only where package.json declares a packageManager (IT-966)', () => {
+		const steps = setupNode('')
+		const declared = validate(job('[self-hosted, gg-runner]', steps), true)
+		expect(declared).toHaveLength(1)
+		expect(declared[0]).toContain('must set package-manager-cache: false')
+		expect(declared[0]).toContain('(IT-966)')
+		// `package-manager-cache: true` ugyanúgy sértés, mint a hiány.
+		expect(
+			validate(job('gg-runner', setupNode('          package-manager-cache: true\n')), true),
+		).toHaveLength(1)
+		// packageManager nélkül a setup-node nem kapcsol vissza semmit: a sor nem kötelező.
+		expect(validate(job('[self-hosted, gg-runner]', steps), false)).toEqual([])
+	})
+
+	it('requires the pnpm dest under runner.temp on gg-runner (IT-971)', () => {
+		const missing = validate(job('[self-hosted, gg-runner]', pnpm('')), false)
+		expect(missing).toHaveLength(1)
+		expect(missing[0]).toContain(
+			'job build runs on gg-runner, so step 2 (pnpm/action-setup) must set with.dest: ${{ runner.temp }}/setup-pnpm',
+		)
+		expect(missing[0]).toContain('(IT-971)')
+		expect(
+			validate(job('gg-runner', pnpm('        with:\n          dest: ~/setup-pnpm\n')), false),
+		).toHaveLength(1)
+	})
+
+	it('leaves GitHub-hosted and other runners alone', () => {
+		const offending =
+			pnpm('') + setupNode('          cache: pnpm\n')
+		expect(validate(job('ubuntu-latest', offending))).toEqual([])
+		expect(validate(job('[self-hosted, other-label]', offending))).toEqual([])
+		expect(validate(job('blacksmith-2vcpu-ubuntu-2404', offending))).toEqual([])
+	})
+
+	it('checks every inventory file and reports the path, and skips reusable-call jobs', () => {
+		const offending = setupNode('          cache: npm\n')
+		const sources = {
+			'.github/workflows/ci.yml': `
+jobs:
+  quality-gate:
+    uses: GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main
+`,
+			'.github/workflows/preview-alias.yml': job('[self-hosted, gg-runner]', offending),
+		}
+		const errors = validateRunnerInvariants({ sources, packageManagerDeclared: false })
+		expect(errors).toHaveLength(1)
+		expect(errors[0]).toMatch(/^\.github\/workflows\/preview-alias\.yml: job build/)
+	})
+
+	it('fails closed on an inventory file that is not valid YAML', () => {
+		expect(
+			validateRunnerInvariants({
+				sources: { '.github/workflows/broken.yml': 'jobs: [' },
+				packageManagerDeclared: false,
+			}),
+		).toEqual(['Workflow YAML is invalid: .github/workflows/broken.yml'])
+	})
+
+	it('runs inside validateWorkflowPolicy when the sources are given', () => {
+		const sources = {
+			'.github/workflows/preview-alias.yml': job(
+				'[self-hosted, gg-runner]',
+				pnpm('') + setupNode('          cache: pnpm\n'),
+			),
+		}
+		const errors = validateWorkflowPolicy(
+			'GuestGuru/gg-sales',
+			validSalesWorkflow,
+			salesInventory,
+			undefined,
+			{ sources, packageManagerDeclared: true },
+		)
+		expect(errors.filter((error) => error.includes('(IT-971)'))).toHaveLength(1)
+		expect(errors.filter((error) => error.includes('(IT-966)'))).toHaveLength(2)
+	})
+
+	it('reads the packageManager declaration from the root package.json', () => {
+		const root = mkdtempSync(join(tmpdir(), 'gg-ci-pm-'))
+		try {
+			// Nincs package.json (pl. monorepo, ahol a csomagok alkönyvtárban vannak).
+			expect(packageJsonDeclaresPackageManager(root)).toBe(false)
+			writeFileSync(join(root, 'package.json'), '{"name":"x"}')
+			expect(packageJsonDeclaresPackageManager(root)).toBe(false)
+			writeFileSync(join(root, 'package.json'), '{"packageManager":"pnpm@9.15.9"}')
+			expect(packageJsonDeclaresPackageManager(root)).toBe(true)
+			writeFileSync(
+				join(root, 'package.json'),
+				'{"devEngines":{"packageManager":{"name":"npm"}}}',
+			)
+			expect(packageJsonDeclaresPackageManager(root)).toBe(true)
+			// Olvashatatlan package.json: fail-closed, a sor kötelező.
+			writeFileSync(join(root, 'package.json'), '{')
+			expect(packageJsonDeclaresPackageManager(root)).toBe(true)
+		} finally {
+			rmSync(root, { recursive: true, force: true })
+		}
+	})
+})
+
 describe('policy source diagnostics (IT-594)', () => {
 	const pinned = 'eda86e0f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f60'
 	const main = '1690247a611b8679cbbe05d86c4114cbf55f1d5e'

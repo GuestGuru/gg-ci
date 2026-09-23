@@ -16,7 +16,7 @@ Node ≥ 24. Nincs lint és nincs build lépés.
 
 ```bash
 npm ci
-npm test            # vitest run — 12 fájl, 140 teszt, ~1 s (mérve 2026-09-15)
+npm test            # vitest run — 12 fájl, 150 teszt, ~2 s (mérve 2026-09-23)
 npm run typecheck
 npm run gg-ci -- <parancs> …     # preview CLI: ensure | destroy | refresh-ttl |
                                  # reset-shared | alias-set | alias-remove
@@ -32,7 +32,7 @@ A repó térképe:
 | `.github/workflows/policy-gate.yml` | az org-ruleset injektálja a CÉL-repóba, a pinelt gg-ci SHA-ról — a cél-PR nem tudja lecserélni |
 | `.github/workflows/preview.yml` | a teljes preview-domain folyamat: PR + Vercel deployment feloldás, elavulás-döntés, alias, PR-komment |
 | `.github/workflows/neon-preview.yml` | per-PR Neon branch + branch-scope-os Vercel preview env |
-| `src/workflow-policy.ts` | a policy: per-repo `policies`, `approvedWorkflowInventories` (workflow-fájl → SHA-256), central-trust self-check, pin-diagnózis |
+| `src/workflow-policy.ts` | a policy: per-repo `policies`, `approvedWorkflowInventories` (workflow-fájl → SHA-256), gg-runner invariánsok (IT-974), central-trust self-check, pin-diagnózis |
 | `src/quality-gate.ts` | a `needs` kiértékelése (fail-closed) |
 | `src/cli.ts`, `src/commands/`, `src/neon.ts`, `src/vercel.ts` | a preview CLI |
 | `src/trust-inventory.json` | a központi bizalmi fájlok hash-manifestje |
@@ -77,11 +77,19 @@ A repó térképe:
   `cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}` +
   `package-manager-cache: false`, a hívók fix `gg-runner` jobjaiban nincs `cache:`.
   A perzisztens runner `~/.npm`-je megmarad, a GitHub-cache ott ~1 GB letöltés volt,
-  jobonként 50–100 s (a jobidő 70–80%-a). Új workflow-ban se tedd vissza.
+  jobonként 50–100 s (a jobidő 70–80%-a). Új workflow-ban se tedd vissza. **A policy
+  ellenőrzi** (IT-974, `validateRunnerInvariants`): minden inventory-fájl minden
+  gg-runneres jobján (`runs-on`-ban `gg-runner` vagy `GG_CI_RUNNER`) a `cache:`
+  tilos (csak a fenti feltételes alak megy át), a `package-manager-cache: false`
+  pedig ott kötelező, ahol a cél-repó gyökér `package.json`-ja `packageManager`-t
+  deklarál (ma: tools, gg-tracker) — pontosan ekkor kapcsolná vissza a setup-node v5.
 - **Saját runneren a `pnpm/action-setup` `dest`-je `${{ runner.temp }}/setup-pnpm`**
   (IT-971). A default `~/setup-pnpm` a két runner-példány közös HOME-jában van, az
   action pedig minden jobban törli és újratelepíti, így két egyszerre induló job
-  egymás alól törli a pnpm-et. Hívói hash jóváhagyásakor ezt is nézd meg.
+  egymás alól törli a pnpm-et. **A policy ellenőrzi** (IT-974): gg-runneres jobban a
+  `pnpm/action-setup` `with.dest`-je pontosan ez kell legyen, különben a policy-gate
+  megnevezi a fájlt, a jobot és a lépést. Mérve 2026-09-23: a 12 ruleset-repó
+  `main`-jén 35 gg-runneres job, 35 setup-node és 8 pnpm lépés, nulla sértés.
 - **Elavult (`stale`) preview-futás nem nyúl az aliashoz** (IT-780) — a sorban álló
   futások befejezési sorrendje megfordulhat, és a felülírt alias halott deploymentre
   mutatna. A `stale` outputot **két** mérés táplálja: egy olcsó a checkout előtt, egy
@@ -108,7 +116,8 @@ meg 10 repón (a `gg-ci` és a `gg-mcp` nélkül). A privát repók CI-ja saját
 A repó 99 commitja túlnyomórészt jóváhagyott hash-bővítés — a mai szerkezet
 2026-07-18 (preview-DB CLI) → 07-23 (quality gate, IT-244) → 07-25 (preview.yml,
 policy-leltár) → 09-10 (saját runner, IT-570) → 09-11/14 (stale-javítások,
-IT-780/IT-810) lépésekben állt össze.
+IT-780/IT-810) → 09-23 (gg-runner invariánsok a policyban, IT-974 — a `main`-en
+van, a következő ruleset re-pinnel élesedik) lépésekben állt össze.
 
 ## Hol van a többi tudás
 
