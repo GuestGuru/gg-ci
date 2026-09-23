@@ -18,7 +18,11 @@ export interface AliasSetResult {
  * certificate for a hostname it has just seen for the first time. Measured
  * against the live API, the certificate lands in roughly 12 seconds, after
  * which the identical call succeeds. Without this retry the *first* alias of
- * every PR would fail, which is precisely the case that always occurs.
+ * every PR would fail on a zone that gets one certificate per host.
+ *
+ * A zone with a wildcard certificate never takes this path — a new host is served
+ * by the wildcard on the first call (README, "Vercel alias API notes"). The retry
+ * stays as the safety net for callers whose zone has no wildcard.
  */
 const CERT_MISSING_CODE = 'cert_missing'
 const CERT_RETRY_DELAY_MS = 5_000

@@ -579,7 +579,25 @@ these events directly will hit them again.
   "the TLS certificate is still being issued". `alias-set` therefore retries **only** this
   code, every 5 s up to 15 attempts (~70 s), and fails immediately on every other code.
   Without the retry the *first* alias of every pull request would fail — the one case that
-  always happens.
+  always happens **unless the alias zone has a wildcard certificate** (next point).
+- **A wildcard certificate on the alias zone removes the wait altogether — and is the
+  sustainable setup.** Measured 2026-09-23: with a per-host certificate the first alias of a
+  PR waited ~18 s in the retry loop (three 5 s rounds) while holding the runner. Once the
+  team held a Vercel-issued `*.preview.example.com` certificate, a brand-new host was
+  aliased on the first call (the whole `alias-set` took 3.2 s including `npm` start-up), no
+  per-host certificate was issued, and existing hosts switched to the wildcard too. Two
+  constraints decide whether you can have one:
+  - Vercel issues (and renews) a wildcard only via DNS-01, so **the zone must be served by
+    Vercel's nameservers** — otherwise `POST /v3/now/certs` answers
+    `dns_pretest_cns_not_using_vercel_ns_error`. The apex does not have to move: delegating
+    just the preview sub-zone (`preview NS ns1.vercel-dns.com / ns2.vercel-dns.com` at the
+    apex's DNS provider) is enough, provided the apex domain belongs to the same Vercel
+    team (its Vercel-side zone then answers for the delegated names).
+  - Without it, every PR host costs one certificate, and they count against Let's
+    Encrypt's **50 certificates per registered domain per week**. That quota is shared with
+    the apex's *production* hosts, and a busy set of repos exhausts it — measured
+    2026-09-23: `too many certificates (50) already issued … in the last 168h`, after which
+    Vercel silently fell back to another CA for the previews.
 - **Adding the domain is idempotent, but the status code cannot be what decides that.**
   A domain already on *this* project fails with **400**, whereas **409** means it belongs
   to *another* Vercel project. Accepting 409 as "already there" would silently alias into
