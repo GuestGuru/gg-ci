@@ -90,6 +90,12 @@ A repó térképe:
   `pnpm/action-setup` `with.dest`-je pontosan ez kell legyen, különben a policy-gate
   megnevezi a fájlt, a jobot és a lépést. Mérve 2026-09-23: a 12 ruleset-repó
   `main`-jén 35 gg-runneres job, 35 setup-node és 8 pnpm lépés, nulla sértés.
+- **Saját runneren a `services:` konténer nem köthet fix host-portot** (IT-924). A két
+  runner-példány közös Docker-daemont használ: `5432:5432` mellett két párhuzamos job
+  közül a második `docker start`-ja bukik, és a main `GG deployment gate`-je is elesett
+  már. Helyesen `ports: - 5432`, az elérés `localhost:${{ job.services.<név>.ports['5432'] }}`
+  (a job a hoszton fut, nincs `container:`). Hívói hash jóváhagyásakor ezt is nézd meg —
+  ezt a policy (IT-974) NEM ellenőrzi.
 - **Elavult (`stale`) preview-futás nem nyúl az aliashoz** (IT-780) — a sorban álló
   futások befejezési sorrendje megfordulhat, és a felülírt alias halott deploymentre
   mutatna. A `stale` outputot **két** mérés táplálja: egy olcsó a checkout előtt, egy
