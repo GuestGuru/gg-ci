@@ -101,7 +101,11 @@ A repó térképe:
   mutatna. A `stale` outputot **két** mérés táplálja: egy olcsó a checkout előtt, egy
   közvetlenül az alias-írás előtt (IT-810). A hívó smoke-ja a PR-számra ÉS a
   `stale`-re kapuzzon; a `preview-url` ürességére **ne** — az pont a valódi hibát
-  nyelné el.
+  nyelné el. **Per-PR adatbázisos app a `preview-db: true` inputot is adja át**
+  (IT-913): egy új PR első deployját a push építi, még a `neon-preview ensure`
+  előtt, `PREVIEW_DB_ISOLATED` és a PR migrációi nélkül — a recency ezt nem látja,
+  mert a redeploy még nem létezik. A deployment `env` névlistája (a `GET
+  /v13/deployments/{host}` válaszban) a bizonyíték; flag nélkül a futás `stale`.
 - **Minden action-referencia SHA-ra van pinelve** (IT-277), és a policy-evaluátorok
   üres `NODE_OPTIONS`-szel, `npm ci --ignore-scripts --userconfig=/dev/null`-lal
   futnak: a cél-repó npm-konfigurációja nem kerülhet a bizalmi útvonalba.

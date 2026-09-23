@@ -523,6 +523,7 @@ opts out and the caller uses the `preview-url` output instead.
 | `comment` | boolean | no (default `true`) | Post — and keep updating — a single PR comment with the preview link. |
 | `comment-note` | string | no | Extra sentence shown under the link in that comment. |
 | `dry-run` | boolean | no (default `false`) | Logs the actions without calling the Vercel write APIs. |
+| `preview-db` | boolean | no (default `false`) | Set it when the app's previews run on a per-PR database from `neon-preview.yml`. A deployment built **before** that database existed — no `PREVIEW_DB_ISOLATED` in its environment — is reported as `stale`: `ensure` redeploys it, and the redeploy's own run covers the commit (IT-913, below). |
 
 `VERCEL_TOKEN` is a required secret.
 
@@ -586,6 +587,28 @@ from its own cause.
 The alias step also re-measures recency immediately before writing, because the
 `stale` decision is taken ~40 seconds earlier (before checkout and `npm ci`), and
 longer still when the runner queues.
+
+⚠️ **With a per-PR database, pass `preview-db: true`** (since IT-913). The first
+deployment of a new pull request is built by the push — before the PR is opened, and
+minutes before `neon-preview ensure` has created the branch and written the
+branch-scoped env vars. That build sees no `PREVIEW_DB_ISOLATED`, runs on the shared
+fallback database without the PR's migrations, and `ensure` then requests a redeploy.
+Recency cannot catch it: when the push-built deployment's run decides, the redeploy
+does not exist yet. Measured on `GuestGuru/ainita#29` (2026-09-18): the push-built
+deployment was READY at 15:08:45, its smoke ran 15:11:40–15:12:57 against a page
+answering HTTP 500, `ensure` created the database at 15:12:12 and the redeploy at
+15:12:20 — whose own run went green. The same shape on `ainita#42` (three deployments
+in a row, the `opened` event never ran `ensure`), `gg-ops#17` and `BPDBv2#135`.
+
+The evidence is in the deployment itself: `GET /v13/deployments/{hostname}` — the
+call `preview.yml` already makes — returns `env`, the list of env var **names** the
+build saw (measured 2026-09-23 on eleven deployments across five projects: the flag is
+absent from every push-built one and present on every redeploy). With `preview-db:
+true`, a deployment without the flag is reported as `stale`, so the caller's smoke
+skips and the alias is left alone; the redeploy's run does the work. It is opt-in
+because an app without a per-PR database never has the flag, and would skip its smoke
+forever. An unknown state (no `env` list in the response) is treated as not stale,
+like every other undecidable case here.
 
 #### What the Vercel deployment event actually contains
 

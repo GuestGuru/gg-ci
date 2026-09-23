@@ -63,6 +63,11 @@ on:
         required: false
         type: boolean
         default: false
+      preview-db:
+        description: "The app's previews run on a per-PR database provisioned by neon-preview.yml. A deployment built BEFORE that database existed (no PREVIEW_DB_ISOLATED in its environment) is reported as stale: `ensure` redeploys it, and the redeploy's own run covers the commit (IT-913)."
+        required: false
+        type: boolean
+        default: false
     outputs:
       pr-number:
         description: "Pull request number the deployment belongs to, or empty."
@@ -142,6 +147,7 @@ jobs:
           VERCEL_PROJECT_ID: ${{ inputs.vercel-project-id }}
           VERCEL_TEAM_ID: ${{ inputs.vercel-team-id }}
           ALIAS_HOST_PATTERN: ${{ inputs.alias-host-pattern }}
+          PREVIEW_DB: ${{ inputs.preview-db }}
           # Untrusted input: env only, never interpolated into the shell.
           TARGET_URL: ${{ github.event.deployment_status.target_url }}
         run: |
@@ -180,6 +186,44 @@ jobs:
             echo "alias-host=${ALIAS_HOST_PATTERN//\{pr\}/$pr}"
             echo "git-ref=$ref"
           } >> "$GITHUB_OUTPUT"
+
+          # WAS THIS DEPLOYMENT BUILT BEFORE ITS PREVIEW DATABASE EXISTED? (IT-913)
+          #
+          # With a per-PR database (neon-preview.yml), the FIRST deployment of a
+          # new pull request is built by the push — before the PR is even opened,
+          # and minutes before `ensure` has created the branch and written the
+          # branch-scoped env vars. That build sees no `PREVIEW_DB_ISOLATED`, so
+          # it runs on the shared fallback database WITHOUT the PR's migrations;
+          # `ensure` then requests a redeploy, and the redeploy is the instance
+          # that matters. The recency check below cannot see this, because at
+          # this moment the redeploy does not exist yet.
+          #
+          # Measured 2026-09-18, ainita#29: the push-built deployment reached
+          # READY at 15:08:45 and its smoke ran 15:11:40–15:12:57 against a page
+          # that answered HTTP 500 (migration skipped); `ensure` created the
+          # database at 15:12:12 and the redeploy was created at 15:12:20. The
+          # redeploy's own run went green — and every such PR paid a blind rerun.
+          # Same pattern on ainita#42 (three deployments in a row), gg-ops#17,
+          # BPDBv2#135 (all measured 2026-09-23).
+          #
+          # The deployment's own environment is the evidence: the SAME
+          # `GET /v13/deployments/{host}` response lists the env var NAMES the
+          # build saw. The flag is written by `neon-preview ensure` on every
+          # per-PR branch, so its absence means "built before the database". No
+          # timestamps to compare, and nothing to race: the list is immutable.
+          #
+          # Opt-in (`preview-db: true`): a caller without a per-PR database never
+          # has the flag, and treating that as stale would skip its smoke forever.
+          # Undecidable (no `env` list at all) means NOT stale, as below.
+          if [[ "$PREVIEW_DB" == "true" ]]; then
+            isolated=$(printf '%s' "$dep" \
+              | jq -r 'if (.env | type) == "array" then (.env | index("PREVIEW_DB_ISOLATED") != null) else "unknown" end')
+            if [[ "$isolated" == "false" ]]; then
+              echo "::notice::Deployment $id was built before its preview database existed (no PREVIEW_DB_ISOLATED in its environment) — neon-preview ensure redeploys it, and that run covers this commit. Tests skip, and the alias is left alone (IT-913)."
+              echo "stale=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
 
           # IS THIS DEPLOYMENT ALREADY SUPERSEDED?
           #
