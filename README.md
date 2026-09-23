@@ -128,6 +128,14 @@ setup-node v5 from switching caching back on by itself when the workspace's
 `package.json` has a `packageManager` field. A caller's own jobs that always run on
 self-hosted runners should leave `cache:` out for the same reason.
 
+The policy gate enforces this (IT-974): in every workflow file of the inventory, a
+job whose `runs-on` names `gg-runner` or `GG_CI_RUNNER` may not give
+`actions/setup-node` a `cache:` input other than the conditional expression above,
+and — when the repository's root `package.json` declares a `packageManager` (or
+`devEngines.packageManager`), which is exactly when setup-node v5 would switch the
+cache back on — must give it `package-manager-cache: false`. The error names the
+file, the job, the step and the fix.
+
 #### pnpm installs into `runner.temp` on self-hosted runners
 
 `pnpm/action-setup` installs pnpm into its `dest` input, `~/setup-pnpm` by default,
@@ -144,6 +152,10 @@ self-hosted runner therefore sets a per-instance, per-job directory:
 ```
 
 It costs nothing: the action reinstalls on every run anyway (measured 0–1 s).
+
+The policy gate enforces this too (IT-974): a `pnpm/action-setup` step in a job
+whose `runs-on` names `gg-runner` or `GG_CI_RUNNER` must set exactly that `dest`,
+in every workflow file of the inventory.
 
 ### Releasing a policy change
 
