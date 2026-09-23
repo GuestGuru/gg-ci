@@ -96,9 +96,9 @@ describe('workflow policy', () => {
 	it('pins the approved gg-ops workflow', () => {
 		expect(workflowInventoryForRepository('GuestGuru/gg-ops')).toEqual({
 			'.github/workflows/ci.yml':
-				'c60858964801b1ccc268082f12e5934f77b7522001ec0df2058d426042b61240',
+				'2fcc57e9b752462c9c90048fd39fd7f7309015c9ad5cb55f625c25e6f63fda38',
 			'.github/workflows/preview-alias.yml':
-				'50562743b89710d2e9e92f15e819c6dad06da3f0ea26483547221b8d4e7125dd',
+				'021fb8cd06f656dd4a4e8a9283012a70ff20824e32ee30491e52d655952fa980',
 			'.github/workflows/preview-db.yml':
 				'bf585bdebf555f5a4084c2f62024d2e8185665a12c98408898d5351b6c609fd1',
 		})
