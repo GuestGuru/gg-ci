@@ -618,6 +618,17 @@ these events directly will hit them again.
     the apex's *production* hosts, and a busy set of repos exhausts it — measured
     2026-09-23: `too many certificates (50) already issued … in the last 168h`, after which
     Vercel silently fell back to another CA for the previews.
+- **The per-host certificates left behind cannot be deleted — and do not need to be.**
+  `DELETE /v8/certs/{id}` (and `/v7`) on a Vercel-issued certificate answers **400
+  `cert_deletion_denied`** ("SSL Certificates provided by the system cannot be deleted");
+  only uploaded certificates are deletable. They are also harmless: Vercel renews only the
+  certificates of hosts that are **still attached to a project**. Measured 2026-09-23: of 62
+  per-PR certificates inside the renewal window, none was renewed — every one of their hosts
+  had been detached by `alias-remove` — while the production certificates expiring on the
+  same days had been renewed 25–29 days early. The leftovers simply expire. What keeps the
+  quota safe is therefore `alias-remove` detaching the host; a host left attached after its
+  PR closed keeps renewing its own certificate. A host that has both a per-host and the
+  wildcard certificate may be served either one by the edge; both are valid.
 - **Adding the domain is idempotent, but the status code cannot be what decides that.**
   A domain already on *this* project fails with **400**, whereas **409** means it belongs
   to *another* Vercel project. Accepting 409 as "already there" would silently alias into
