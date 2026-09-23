@@ -73,6 +73,11 @@ A repó térképe:
   A `vars` a HÍVÓ (ill. injektált workflow-nál a CÉL) repóra oldódik fel, ezért a
   hívóknak nincs teendőjük. **Ütemezett (`schedule`) futás mindig `ubuntu-latest`** —
   a saját runner aludhat. A változó törlése az egylépéses vészfék (IT-570).
+- **Saját runneren nincs `setup-node` cache** (IT-966): a gg-ci workflow-iban
+  `cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}` +
+  `package-manager-cache: false`, a hívók fix `gg-runner` jobjaiban nincs `cache:`.
+  A perzisztens runner `~/.npm`-je megmarad, a GitHub-cache ott ~1 GB letöltés volt,
+  jobonként 50–100 s (a jobidő 70–80%-a). Új workflow-ban se tedd vissza.
 - **Elavult (`stale`) preview-futás nem nyúl az aliashoz** (IT-780) — a sorban álló
   futások befejezési sorrendje megfordulhat, és a felülírt alias halott deploymentre
   mutatna. A `stale` outputot **két** mérés táplálja: egy olcsó a checkout előtt, egy
