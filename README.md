@@ -672,9 +672,11 @@ READY at 15:59:22, PR opened at 16:18:16, the only run for that commit skipped a
 
 How often it happens (measured 2026-09-23, the last 100 preview deployments of ten
 projects, 381 branches): in 209 the PR was opened **after** its first deployment was
-created (p50 20 s, p90 46 s after), and in 62 after that deployment was READY — 58 of
-those within 60 s, then nothing until 192 s, and single cases at 310 s, 19 min and
-107 min.
+created (p50 20 s, p90 46 s after), and in 61 after that deployment was READY — 58 of
+those within 60 s, then nothing until 192 s, and single cases at 310 s and 19 min. (A
+107-minute case in the first count was an artifact of branch-name reuse: eleven
+`gg-design` PRs shared one branch, and that PR's own head was READY 32 s *after* it
+opened — re-measured 2026-09-23, IT-985.)
 
 What `preview.yml` now guarantees:
 
@@ -698,6 +700,30 @@ What `preview.yml` now guarantees:
   `pull_request` workflow. Do not reach for it before checking the run: a missing
   status is far more often the runner queue (see the numbers above) than this case —
   the job log says `does not belong to a pull request` when it is this case.
+  How rare it is there: of the 76 `gg-design` PRs opened 2026-08-24 – 09-23, exactly
+  one (#119, 19 min) opened more than two minutes after its head's READY; every other
+  one opened before READY or within 42 s of it (re-measured 2026-09-23, IT-985).
+
+**Why there is no automatic re-trigger (IT-985).** Two designs were weighed and
+rejected at one case a month:
+
+- *Re-post a `success` deployment status on `pull_request: opened`, so the existing
+  `deployment_status` chain runs again.* It cannot work with the workflow's own token:
+  events caused by `GITHUB_TOKEN` start no workflow runs, except `workflow_dispatch`
+  and `repository_dispatch` (GitHub docs, "GITHUB_TOKEN"). The status would appear on
+  the deployment and nothing would run. It would take a GitHub App token or a PAT in
+  every caller — a new long-lived secret for a monthly edge case.
+- *Resolve, alias and output from a `pull_request` branch of this workflow.* That
+  event has no `deployment_status.target_url` and its `github.sha` is the merge commit,
+  so the caller's smoke job would need a different target SHA and URL source on that
+  path — a caller change on top of the trigger change, and two code paths to keep
+  equivalent.
+
+A Vercel-side redeploy on `opened` (what `neon-preview ensure` does on the database
+apps) would work, since Vercel's own `deployment_status` does start runs — but it
+still costs a caller trigger change, a pin cycle and a build per PR, for the same one
+case a month. The documented remedy above stays the answer; revisit if the
+frequency changes, or if a second app without a per-PR database joins.
 
 The token for the GitHub lookup is the caller's `github.token`; the `pull-requests:
 write` the caller example already grants for the comment covers it.

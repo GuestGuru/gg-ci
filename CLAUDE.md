@@ -101,8 +101,10 @@ A repó térképe:
   tüzel, és DB nélküli appon (gg-design) nincs második futás — a smoke kimaradt, a
   kötelező `GG smoke gate` sosem jött, a PR némán BLOCKED. Üres `githubPrId`-nál a `r`
   lépés a GitHub `commits/{deployment.sha}/pulls` végpontját méri 12 × 10 s-ig (mérve:
-  a READY után nyíló PR-ek 58/62-je 60 s-on belül, 60–190 s között nincs eset). A
-  határon túl DB-s appon az `ensure` redeployja pótol, gg-designon csak új deployment.
+  a READY után nyíló PR-ek 58/61-e 60 s-on belül, 60–190 s között nincs eset). A
+  határon túl DB-s appon az `ensure` redeployja pótol, gg-designon csak új deployment
+  (30 nap alatt 76 PR-ből 1). Auto-újratrigger szándékosan nincs (IT-985): a
+  `github.token`-nel POST-olt deployment status **nem indít** futást.
   Hiányzó smoke gate-nél **előbb a runner-sort mérd** (jobs API `started_at`; p50 87 s,
   p90 15 perc), ne retrigger-commitot pusholj.
 - **Elavult (`stale`) preview-futás nem nyúl az aliashoz** (IT-780) — a sorban álló

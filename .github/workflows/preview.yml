@@ -193,12 +193,17 @@ jobs:
           #
           # Measured 2026-09-23 on the last 100 preview deployments of ten
           # projects (381 branches): in 209 the PR was opened after its first
-          # deployment was created (p50 20 s, p90 46 s after), in 62 after that
+          # deployment was created (p50 20 s, p90 46 s after), in 61 after that
           # deployment was READY — 58 of those within 60 s, then nothing until
-          # 192 s, and single cases at 310 s, 19 min and 107 min. Two minutes of
+          # 192 s, and single cases at 310 s and 19 min (a 107-min case was a
+          # branch-name-reuse artifact, re-measured for IT-985). Two minutes of
           # polling therefore covers the cluster with 2x headroom; the outliers
           # cannot be covered by waiting at all (an empty push or, on apps with
           # a per-PR database, `neon-preview ensure`'s redeploy handles them).
+          # There is deliberately no automatic re-trigger for the rest: a
+          # deployment status posted with `github.token` starts no workflow run,
+          # and the alternatives cost a caller change for ~one case a month
+          # (IT-985; the README has the measurement and the options).
           #
           # GitHub is asked, not Vercel: `commits/{sha}/pulls` is the source of
           # truth for "which open PR has this commit". Vercel does backfill
