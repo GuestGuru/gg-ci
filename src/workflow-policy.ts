@@ -101,47 +101,47 @@ const policies: Record<string, WorkflowPolicy> = {
 const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	'GuestGuru/ainita': {
 		'.github/workflows/ci.yml':
-			'90be4fa46648cb208bb1161d3fd3d00ce27b1cb2369958302c09887a2cd77d32',
+			'2bb8597f83769854087e0fb5ce7526a6329a4fcf1661784ddc9c30695c0c159d',
 		'.github/workflows/preview-alias.yml':
-			'8828e40a16ccfc9cc976e8d6db4393bc1a09e287951aa3578811189c0888d4a7',
+			'84f01b9788f996dca16a4806f66a89609ccf7e835ff3e560a215166fdcfd3208',
 		'.github/workflows/preview-db.yml':
 			'5dd303b6c3e41570faf47d75b0be9303bf1e68526a46bbe36ebd6166f3ae22b9',
 	},
 	'GuestGuru/gg-share': {
 		'.github/workflows/ci.yml':
-			'd50f42b4379b1d8417b85a4fd0d3191d94b06fa2ee3c128ae94dee4f6806e392',
+			'c8b1abd956de1be236aa67d37ca3bb1120f95557ed8bebde56f578ab00a9a899',
 		'.github/workflows/preview-alias.yml':
-			'd525a6c7ff25f2ffd9d772a4977c527fa7c308f541e66ca0851b4adb5fcfb151',
+			'cedfb9348fb161a4f8ee0de5c9773b0088ac7920e55da54eaa5a5db897c4bdf7',
 		'.github/workflows/preview-db.yml':
 			'ef72e4279f6f2cfdf4ce7a34ad46900860adc6c76ad217afe7ae8b06aa352ad0',
 	},
 	'GuestGuru/gg-mcp': {
 		'.github/workflows/ci.yml':
-			'f1e4773d59b9b8a7337a7400b879b6dd3da6ada7ec4fa8e7ae62b78a57fa1838',
+			'fef762e470f5d9c630ad8893e6b20930d0bdaaeb3b63418ad431550b3085d9c4',
 	},
 	'GuestGuru/gg-ci': {
 		'.github/workflows/ci.yml':
 			'3fc6c8a4df55f972e91821f511e3716d78d9517cf4da28d5e37cec6d0e504001',
 		'.github/workflows/neon-preview.yml':
-			'2b90ae54788591afcd45febdc59be1489310e5f193687a0744f8b9fd73530fdf',
+			'9c2eb2903a0fa765528c7f78619f8a7f0ae6d1294615c5425a31c07ee9f1377e',
 		'.github/workflows/policy-gate.yml':
-			'b5e629a4d70094a37601ce3fa9b2581ebde44c23ba026e0e96cefb6739ca8d78',
+			'3b22e34d2de7d6ab5545f9170d469d4ba396bdda74abb3dd56feb3893cc13483',
 		'.github/workflows/preview.yml':
-			'deda2cd917c6d0473ca476f03b2089b86485b2988cda6c7cc0ca328da0bfdaf1',
+			'daf4141878c613c31532227e8907da19e725bbd9e9ef286a0637682ab2a604d8',
 		'.github/workflows/quality-gate.yml':
-			'c17612b20c64accf05bfd1a89d1c33dcf052be450089f79e94a9452f9f2e3893',
+			'2140fef05a400af95c7276d67cbbdd1ac5823e58f2d28dd862366af6e976add6',
 	},
 	'GuestGuru/gg-sales': {
 		'.github/workflows/ci.yml':
 			'1e245fe8a3fc413c1a2b9d30e840e84e78b4c20ab8be0012869d1895c3657bcb',
 		'.github/workflows/preview-alias.yml':
-			'd5fc8a6a850b828f16e6fd10e8a5887a2ffaa04e1cdc3d7c36a10547fb17947e',
+			'c5b0c45e0e7930af70a496ed83eab29c5a5ccdb2cc5bddd426a7d788403b44af',
 		'.github/workflows/preview-db.yml':
 			'9bab599cdb1b2e41eba83409ae0f22ebd4cccd45d6bc911ee2ecf767d2eb4364',
 	},
 	'GuestGuru/gg-design': {
 		'.github/workflows/registry.yml':
-			'3bd18d29663ba3da5a52d90b09fc2a62211d33b239cbd4fce9db2ed13cf4e0ec',
+			'5d276b222571f6259f148f1e4c112f8875313f6612dfda93a1740e3b29835ed6',
 		'.github/workflows/preview.yml':
 			'bad70d6524bb5578f4c9e26be15e293a929dacb1d42abd32fe0377573cbd6ab2',
 	},
@@ -155,47 +155,47 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/gg-agents': {
 		'.github/workflows/ci.yml':
-			'd0fcab0eed04ecb53c55a54e1922b46bca501ec2556193210ba0d824c0f69812',
+			'1a44d15cc66095a571a252ce48abfedfa9370155553724cac51ffeb2f5bf2ac8',
 		'.github/workflows/preview-alias.yml':
-			'd26d3a471f1cf8b855d942154dc4e3aaadffc0dc5e3c366addea56bc7df956a4',
+			'cb806500f9a34a1e4916ed36556d803f4dd8374b14a622b08852d9f5cff8cb5e',
 		'.github/workflows/preview-db.yml':
 			'9f32bc480118ebda9f696ee7465453de6f7f00410e40b124f37863582533717c',
 	},
 	'GuestGuru/gg-ops': {
 		'.github/workflows/ci.yml':
-			'0acccd15d0988e9b946e2e17583fac8feff1fd720bc49f4f0de8a02abee3a5b6',
+			'c60858964801b1ccc268082f12e5934f77b7522001ec0df2058d426042b61240',
 		'.github/workflows/preview-alias.yml':
-			'97455ebc65e13a6914c2289f5629555cf4a58f92b846d69cd48a56f5ffaa51a4',
+			'50562743b89710d2e9e92f15e819c6dad06da3f0ea26483547221b8d4e7125dd',
 		'.github/workflows/preview-db.yml':
 			'bf585bdebf555f5a4084c2f62024d2e8185665a12c98408898d5351b6c609fd1',
 	},
 	'GuestGuru/tools': {
 		'.github/workflows/ci.yml':
-			'ed521bde7f4ef2305e69f66a1659ee55d59bd7f0e669e0a7337f5d4e8e9fddc2',
+			'c52bfe0bcda736852d838bd90d8e087b97f229ffa5d37232751fe0640e6b54a9',
 		'.github/workflows/delivery-doctor.yml':
 			'46a6f754476399e6015a81bffb32eec7230df34a8f966a4cd805a85a9e5d09ea',
 		'.github/workflows/preview-alias.yml':
-			'02a0ce06d4700750696de9789c42fbd66271de716d787f30138488fc1e4f9c90',
+			'df9f066fb147e54a523a1ca985e5f4e838e86c52901bb7141b2247b89c214e4c',
 		'.github/workflows/preview-db.yml':
 			'993326888ae69ac03f42f7493c7446c2206a5ebb150c5198ca8051f9bf31e07f',
 		'.github/workflows/publish-auth.yml':
-			'3e435b51a35d0580929b6847e773a3bd1f2406a89cf7e057bffed9e61ab4349d',
+			'925b09434d44a4b018a8ba4dcbf1e9985f77e697b008d1a4e6d365176dbbdb95',
 		'.github/workflows/token-expiry.yml':
 			'25e0fd53ed3c0c84649e8cf8248e0ca9fc2dc94559ffb0ce5c82e0325c6fc531',
 	},
 	'GuestGuru/irnok': {
 		'.github/workflows/ci.yml':
-			'c088da7e92a1d650f75307a18dc47d076c71cc842b669de0e6830948a794be87',
+			'd819b498bf35d894680a3b07e5f23364a4f454f0529760d5d88adedd5bc2aa01',
 		'.github/workflows/preview-alias.yml':
-			'52a2d83907be3a8e0b16b50c9e3b2d6173a87898b3acdbfd97b2ff4143087d33',
+			'9469a716bddc5ac2e9e6d889e49be36f76b507a3dda364b02ae2fa9330578290',
 		'.github/workflows/preview-db.yml':
 			'd2de948bd8611ad452d397412e533f85e183bdc5dc0ad95488c2dcf6936b53e3',
 	},
 	'GuestGuru/gg-tracker': {
 		'.github/workflows/ci.yml':
-			'a5d5f792a396d33082795b0503323b37b96e191af6feb8f6ef3b4ff349fd6134',
+			'e9404bdeb15ebfb1b1eac89c19a9b499aecdaa9341c4023ff475b16aeccf9599',
 		'.github/workflows/preview-alias.yml':
-			'13ee8171e1a9f6de5f178d5e363dba13bc022b9ef148bc7065e5fe9ff038d3b8',
+			'427973792af22e420863dce4b2a191bd0047cc167439f3e2fee3730e2fb57a1b',
 		'.github/workflows/preview-db.yml':
 			'5ce68336d44583d84b9389e7565ad6b68456755dbb451b4e1d686ccdb230ebca',
 	},

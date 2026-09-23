@@ -108,6 +108,26 @@ Three things this shape buys, each of them deliberate:
 This repository's own `.github/workflows/ci.yml` is pinned to `ubuntu-latest` on
 purpose, for the same reason as the first row of the table.
 
+#### No dependency cache on self-hosted runners
+
+Because the same job may land on either runner kind, every `actions/setup-node`
+step here enables the GitHub dependency cache only on GitHub-hosted runners:
+
+```yaml
+cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
+package-manager-cache: false
+```
+
+A persistent self-hosted runner keeps its package-manager cache (`~/.npm`, the pnpm
+store) from job to job, so restoring the GitHub cache there only re-downloads what is
+already on disk. It is also far larger than on a fresh runner: every repository
+installs into the same `~/.npm`, so each saved entry carries all of their packages.
+Measured on arm64 self-hosted runners: a 1.07 GB restore at ~16 MB/s, 50–100 s of
+every job, 70–80% of total job time. `package-manager-cache: false` stops
+setup-node v5 from switching caching back on by itself when the workspace's
+`package.json` has a `packageManager` field. A caller's own jobs that always run on
+self-hosted runners should leave `cache:` out for the same reason.
+
 ### Releasing a policy change
 
 The organization ruleset must pin this required workflow to an immutable commit `sha`,

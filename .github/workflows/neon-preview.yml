@@ -114,7 +114,11 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "24"
-          cache: npm
+          # GitHub-cache csak felhős runneren (IT-966): a gg-runner ~/.npm-je
+          # jobról jobra megmarad, ott a visszaállítás ~1 GB letöltés volt
+          # (50–100 s jobonként), és semmit nem gyorsított.
+          cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}
+          package-manager-cache: false
 
       - run: npm ci
 
