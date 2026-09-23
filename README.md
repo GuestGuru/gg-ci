@@ -174,6 +174,12 @@ three-step release operation:
 3. **Close/reopen the target pull request** so the policy runs again under the fresh pin.
    A plain re-run does not help — `ref: ${{ job.workflow_sha }}` inherits the old pin.
 
+Steps 2 and 3 are one command in `GuestGuru/tools` (`packages/delivery-doctor`):
+`pnpm chain release --dry-run`, then `pnpm chain release` — it re-pins only when
+`src/`, `.github/workflows/` or a root `package*.json` changed since the current pin,
+then closes/reopens every open pull request in the ruleset's repositories and prints a
+summary table.
+
 Changing `gg-ci`'s own `.github/workflows/` files needs one extra turn of the same crank,
 since the trusted checkout also carries the inventory that approves them: pin the ruleset
 to the reviewed candidate SHA, verify, merge, then pin to the resulting main SHA.
@@ -523,6 +529,7 @@ opts out and the caller uses the `preview-url` output instead.
 | `comment` | boolean | no (default `true`) | Post — and keep updating — a single PR comment with the preview link. |
 | `comment-note` | string | no | Extra sentence shown under the link in that comment. |
 | `dry-run` | boolean | no (default `false`) | Logs the actions without calling the Vercel write APIs. |
+| `preview-db` | boolean | no (default `false`) | Set it when the app's previews run on a per-PR database from `neon-preview.yml`. A deployment built **before** that database existed — no `PREVIEW_DB_ISOLATED` in its environment — is reported as `stale`: `ensure` redeploys it, and the redeploy's own run covers the commit (IT-913, below). |
 
 `VERCEL_TOKEN` is a required secret.
 
@@ -531,7 +538,7 @@ opts out and the caller uses the `preview-url` output instead.
 | Output | Meaning |
 |---|---|
 | `preview-url` | `https://<alias-host>`, set once the alias is attached. Empty on a stale run, which deliberately does not touch the alias. |
-| `pr-number` | Pull request number the deployment belongs to, or empty. |
+| `pr-number` | Pull request number the deployment belongs to, or empty. Resolved from the deployment's metadata, and — when the PR was opened after the push that built the deployment — from GitHub's `commits/{sha}/pulls`, polled for up to two minutes (IT-983, below). |
 | `deployment-id` | Vercel deployment ID, or empty when the run was skipped. |
 | `stale` | `true` when a newer preview deployment already exists for the same git ref. A caller's smoke job should skip on this — the newer deployment's run covers it. TWO checks feed it: a cheap one before checkout, and a second one immediately before the alias write, which catches a deployment that became newer in between (IT-810). |
 
@@ -587,6 +594,43 @@ The alias step also re-measures recency immediately before writing, because the
 `stale` decision is taken ~40 seconds earlier (before checkout and `npm ci`), and
 longer still when the runner queues.
 
+⚠️ **A run for a closed pull request does not attach the alias either** (since IT-975).
+The same queue reorders a `deployment_status` run against the `unalias` run of the
+PR's close: a run that started before the close and reached the alias step after it
+re-attached the host, and from then on the closed PR's link showed a live preview, the
+host stayed on the Vercel project and its certificate kept renewing (IT-969).
+Measured on `GuestGuru/gg-sales#54` (unalias at 14:09:59, aliased at 14:10:19) and
+`#43` (unalias at 17:16:52, aliased at 17:17:13 from a run started at 17:15:09), both
+2026-09-23. Recency cannot catch it — the deployment is still the newest for its ref —
+so the alias step now reads the PR's state (`GET /repos/{owner}/{repo}/pulls/{n}`,
+with the caller's `github.token`) immediately before writing: `closed` means no alias
+and `stale=true`, so the caller's smoke skips as on a superseded deployment. An
+unreadable state counts as open, like every undecidable case here. The window is
+narrowed to one API call, not closed; the daily `preview-hosztok` measurement in
+`tools/packages/delivery-doctor` (IT-970) reports what slips through.
+
+⚠️ **With a per-PR database, pass `preview-db: true`** (since IT-913). The first
+deployment of a new pull request is built by the push — before the PR is opened, and
+minutes before `neon-preview ensure` has created the branch and written the
+branch-scoped env vars. That build sees no `PREVIEW_DB_ISOLATED`, runs on the shared
+fallback database without the PR's migrations, and `ensure` then requests a redeploy.
+Recency cannot catch it: when the push-built deployment's run decides, the redeploy
+does not exist yet. Measured on `GuestGuru/ainita#29` (2026-09-18): the push-built
+deployment was READY at 15:08:45, its smoke ran 15:11:40–15:12:57 against a page
+answering HTTP 500, `ensure` created the database at 15:12:12 and the redeploy at
+15:12:20 — whose own run went green. The same shape on `ainita#42` (three deployments
+in a row, the `opened` event never ran `ensure`), `gg-ops#17` and `BPDBv2#135`.
+
+The evidence is in the deployment itself: `GET /v13/deployments/{hostname}` — the
+call `preview.yml` already makes — returns `env`, the list of env var **names** the
+build saw (measured 2026-09-23 on eleven deployments across five projects: the flag is
+absent from every push-built one and present on every redeploy). With `preview-db:
+true`, a deployment without the flag is reported as `stale`, so the caller's smoke
+skips and the alias is left alone; the redeploy's run does the work. It is opt-in
+because an app without a per-PR database never has the flag, and would skip its smoke
+forever. An unknown state (no `env` list in the response) is treated as not stale,
+like every other undecidable case here.
+
 #### What the Vercel deployment event actually contains
 
 Both facts below were measured against a live Vercel–GitHub integration
@@ -601,14 +645,88 @@ these events directly will hit them again.
   resolve the PR from the git ref at all: it reads `meta.githubPrId` out of the same
   `GET /v13/deployments/{hostname}` response it already needs for the deployment id —
   measured 2026-07-25 on 18 preview deployments across six projects, present on every
-  one. A GitHub-side lookup (`repos/{owner}/{repo}/commits/{sha}/pulls`) also works,
-  but costs an extra round-trip and an extra token scope.
+  one — every one of which had its PR open before the push. It is written at
+  deployment creation, so a PR opened after the push is missing from it at the time
+  the `deployment_status` run looks (measured 2026-09-23; Vercel does backfill it
+  later, when the PR opens). Since IT-983 the workflow falls back to the GitHub-side
+  lookup (`repos/{owner}/{repo}/commits/{sha}/pulls`, with `deployment.sha`) for up
+  to two minutes — see "What the smoke gate guarantees when the PR is opened late".
 - **`deployment.payload` is an empty object (`{}`).** There is no `deploymentId`
   in it, so passing `deployment.payload.deploymentId` sends an empty string and
   `alias-set` fails with `Missing required argument: --deployment-id`. The
   deployment is instead identified by the hostname in
   `deployment_status.target_url`: `GET /v13/deployments/{hostname}` returns the
   real `dpl_...` ID.
+
+#### What the smoke gate guarantees when the PR is opened late (IT-983)
+
+`deployment_status` fires when the deployment is READY — typically 30–60 seconds after
+the push — and the pull request is often opened after that push. Vercel writes
+`meta.githubPrId` when it creates the deployment, so a PR opened later is not in it,
+and until IT-983 the run said "does not belong to a pull request" and stopped. On an
+app **without** a per-PR database nothing runs again for that commit: no alias, no
+smoke job, no `GG smoke gate` status — every other check green and the merge BLOCKED,
+with nothing pointing at the cause. Measured on `GuestGuru/gg-design#119` (2026-09-23):
+READY at 15:59:22, PR opened at 16:18:16, the only run for that commit skipped at
+16:04:39.
+
+How often it happens (measured 2026-09-23, the last 100 preview deployments of ten
+projects, 381 branches): in 209 the PR was opened **after** its first deployment was
+created (p50 20 s, p90 46 s after), and in 61 after that deployment was READY — 58 of
+those within 60 s, then nothing until 192 s, and single cases at 310 s and 19 min. (A
+107-minute case in the first count was an artifact of branch-name reuse: eleven
+`gg-design` PRs shared one branch, and that PR's own head was READY 32 s *after* it
+opened — re-measured 2026-09-23, IT-985.)
+
+What `preview.yml` now guarantees:
+
+- If the PR exists when the job starts, or opens within **two minutes** after it, the
+  PR is resolved and the caller's smoke job runs. When `meta.githubPrId` is empty, the
+  run asks GitHub (`repos/{owner}/{repo}/commits/{sha}/pulls`, the deployment's own
+  commit, open PRs only) twelve times, ten seconds apart. That covers the measured
+  cluster with 2x headroom; it costs at most two minutes of runner time, and only on
+  deployments that have no PR yet. The self-hosted runner queue alone is p50 87 s and
+  p90 15 min on these runs (300 runs measured), so in practice the window from READY is
+  wider than two minutes. Vercel also backfills `githubPrId` onto existing deployments
+  when the PR opens (measured on all 209) — but that is undocumented, so GitHub is asked.
+- With a per-PR database (`neon-preview.yml`), a PR opened even later still gets its
+  smoke: `ensure` runs on `opened`, redeploys, and the redeploy's `deployment_status`
+  run finds the PR. Pass `preview-db: true` (IT-913) so the push-built deployment's
+  run is reported `stale` instead of measuring the wrong instance.
+- **Without** a per-PR database (today: `gg-design`), a PR opened more than two minutes
+  after READY still gets no run for that commit. The remedy is a fresh deployment:
+  push a real change, or an empty commit — an empty commit does start a Vercel
+  deployment and therefore a `deployment_status` run, even though it starts no
+  `pull_request` workflow. Do not reach for it before checking the run: a missing
+  status is far more often the runner queue (see the numbers above) than this case —
+  the job log says `does not belong to a pull request` when it is this case.
+  How rare it is there: of the 76 `gg-design` PRs opened 2026-08-24 – 09-23, exactly
+  one (#119, 19 min) opened more than two minutes after its head's READY; every other
+  one opened before READY or within 42 s of it (re-measured 2026-09-23, IT-985).
+
+**Why there is no automatic re-trigger (IT-985).** Two designs were weighed and
+rejected at one case a month:
+
+- *Re-post a `success` deployment status on `pull_request: opened`, so the existing
+  `deployment_status` chain runs again.* It cannot work with the workflow's own token:
+  events caused by `GITHUB_TOKEN` start no workflow runs, except `workflow_dispatch`
+  and `repository_dispatch` (GitHub docs, "GITHUB_TOKEN"). The status would appear on
+  the deployment and nothing would run. It would take a GitHub App token or a PAT in
+  every caller — a new long-lived secret for a monthly edge case.
+- *Resolve, alias and output from a `pull_request` branch of this workflow.* That
+  event has no `deployment_status.target_url` and its `github.sha` is the merge commit,
+  so the caller's smoke job would need a different target SHA and URL source on that
+  path — a caller change on top of the trigger change, and two code paths to keep
+  equivalent.
+
+A Vercel-side redeploy on `opened` (what `neon-preview ensure` does on the database
+apps) would work, since Vercel's own `deployment_status` does start runs — but it
+still costs a caller trigger change, a pin cycle and a build per PR, for the same one
+case a month. The documented remedy above stays the answer; revisit if the
+frequency changes, or if a second app without a per-PR database joins.
+
+The token for the GitHub lookup is the caller's `github.token`; the `pull-requests:
+write` the caller example already grants for the comment covers it.
 
 #### Vercel alias API notes
 

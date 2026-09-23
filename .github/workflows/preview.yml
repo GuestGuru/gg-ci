@@ -63,6 +63,11 @@ on:
         required: false
         type: boolean
         default: false
+      preview-db:
+        description: "The app's previews run on a per-PR database provisioned by neon-preview.yml. A deployment built BEFORE that database existed (no PREVIEW_DB_ISOLATED in its environment) is reported as stale: `ensure` redeploys it, and the redeploy's own run covers the commit (IT-913)."
+        required: false
+        type: boolean
+        default: false
     outputs:
       pr-number:
         description: "Pull request number the deployment belongs to, or empty."
@@ -139,9 +144,16 @@ jobs:
         shell: bash
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          # For the GitHub-side pull request lookup below (IT-983). The caller's
+          # job already grants `pull-requests: write` for the comment step.
+          GH_TOKEN: ${{ github.token }}
+          # The commit this deployment was built from — GitHub's own view of it,
+          # so the PR lookup does not depend on Vercel's metadata being there.
+          DEPLOYMENT_SHA: ${{ github.event.deployment.sha }}
           VERCEL_PROJECT_ID: ${{ inputs.vercel-project-id }}
           VERCEL_TEAM_ID: ${{ inputs.vercel-team-id }}
           ALIAS_HOST_PATTERN: ${{ inputs.alias-host-pattern }}
+          PREVIEW_DB: ${{ inputs.preview-db }}
           # Untrusted input: env only, never interpolated into the shell.
           TARGET_URL: ${{ github.event.deployment_status.target_url }}
         run: |
@@ -166,10 +178,66 @@ jobs:
             exit 0
           fi
 
+          # THE PULL REQUEST MAY NOT EXIST YET (IT-983).
+          #
+          # `meta.githubPrId` is written when Vercel creates the deployment — from
+          # the push. A pull request opened AFTER that push is not in it, and this
+          # event fires at READY, so the run that reaches this point may be the
+          # only run this commit ever gets: on an app without a per-PR database
+          # no redeploy follows, nothing re-triggers `deployment_status`, the
+          # caller's smoke job never starts, and the required `GG smoke gate`
+          # status never arrives. Every other check is green and the merge is
+          # BLOCKED with nothing pointing at the cause (GuestGuru/gg-design#119,
+          # 2026-09-23: READY 15:59:22, PR opened 16:18:16, this run said
+          # "does not belong to a pull request").
+          #
+          # Measured 2026-09-23 on the last 100 preview deployments of ten
+          # projects (381 branches): in 209 the PR was opened after its first
+          # deployment was created (p50 20 s, p90 46 s after), in 61 after that
+          # deployment was READY — 58 of those within 60 s, then nothing until
+          # 192 s, and single cases at 310 s and 19 min (a 107-min case was a
+          # branch-name-reuse artifact, re-measured for IT-985). Two minutes of
+          # polling therefore covers the cluster with 2x headroom; the outliers
+          # cannot be covered by waiting at all (an empty push or, on apps with
+          # a per-PR database, `neon-preview ensure`'s redeploy handles them).
+          # There is deliberately no automatic re-trigger for the rest: a
+          # deployment status posted with `github.token` starts no workflow run,
+          # and the alternatives cost a caller change for ~one case a month
+          # (IT-985; the README has the measurement and the options).
+          #
+          # GitHub is asked, not Vercel: `commits/{sha}/pulls` is the source of
+          # truth for "which open PR has this commit". Vercel does backfill
+          # `githubPrId` onto existing deployments when the PR opens (measured
+          # on all 209), but that is undocumented behaviour, and the SHA comes
+          # from the event itself. Twelve probes ten seconds apart; a failed
+          # probe counts as "not yet", never as an error — a non-PR deployment
+          # remains a legitimate, quiet outcome.
+          if [[ -z "$pr" ]]; then
+            sha=${DEPLOYMENT_SHA:-$(printf '%s' "$dep" | jq -r '.meta.githubCommitSha // empty')}
+            # Event data goes into a URL path: accept nothing but a commit SHA.
+            [[ "$sha" =~ ^[0-9a-f]{7,40}$ ]] || sha=""
+            if [[ -n "$sha" ]]; then
+              for attempt in $(seq 1 12); do
+                # A failed call (or an error object instead of the array) must
+                # read as "not yet": this step runs under `set -e`.
+                pr=$( { gh api "repos/${GITHUB_REPOSITORY}/commits/${sha}/pulls" 2>/dev/null || true; } \
+                      | jq -r --arg ref "$ref" '
+                          (if type == "array" then . else [] end)
+                          | [ .[] | select(.state == "open") | select($ref == "" or .head.ref == $ref) ]
+                          | .[0].number // empty' 2>/dev/null || true)
+                if [[ -n "$pr" ]]; then
+                  echo "::notice::$host was deployed before pull request #$pr existed — found it on probe $attempt (IT-983)."
+                  break
+                fi
+                if (( attempt < 12 )); then sleep 10; fi
+              done
+            fi
+          fi
+
           # Direct branch pushes produce previews with no pull request. There is
           # nobody to link, so there is nothing to do.
           if [[ -z "$pr" ]]; then
-            echo "::notice::$host does not belong to a pull request — skipping."
+            echo "::notice::$host does not belong to a pull request (none opened within two minutes) — skipping."
             exit 0
           fi
 
@@ -180,6 +248,44 @@ jobs:
             echo "alias-host=${ALIAS_HOST_PATTERN//\{pr\}/$pr}"
             echo "git-ref=$ref"
           } >> "$GITHUB_OUTPUT"
+
+          # WAS THIS DEPLOYMENT BUILT BEFORE ITS PREVIEW DATABASE EXISTED? (IT-913)
+          #
+          # With a per-PR database (neon-preview.yml), the FIRST deployment of a
+          # new pull request is built by the push — before the PR is even opened,
+          # and minutes before `ensure` has created the branch and written the
+          # branch-scoped env vars. That build sees no `PREVIEW_DB_ISOLATED`, so
+          # it runs on the shared fallback database WITHOUT the PR's migrations;
+          # `ensure` then requests a redeploy, and the redeploy is the instance
+          # that matters. The recency check below cannot see this, because at
+          # this moment the redeploy does not exist yet.
+          #
+          # Measured 2026-09-18, ainita#29: the push-built deployment reached
+          # READY at 15:08:45 and its smoke ran 15:11:40–15:12:57 against a page
+          # that answered HTTP 500 (migration skipped); `ensure` created the
+          # database at 15:12:12 and the redeploy was created at 15:12:20. The
+          # redeploy's own run went green — and every such PR paid a blind rerun.
+          # Same pattern on ainita#42 (three deployments in a row), gg-ops#17,
+          # BPDBv2#135 (all measured 2026-09-23).
+          #
+          # The deployment's own environment is the evidence: the SAME
+          # `GET /v13/deployments/{host}` response lists the env var NAMES the
+          # build saw. The flag is written by `neon-preview ensure` on every
+          # per-PR branch, so its absence means "built before the database". No
+          # timestamps to compare, and nothing to race: the list is immutable.
+          #
+          # Opt-in (`preview-db: true`): a caller without a per-PR database never
+          # has the flag, and treating that as stale would skip its smoke forever.
+          # Undecidable (no `env` list at all) means NOT stale, as below.
+          if [[ "$PREVIEW_DB" == "true" ]]; then
+            isolated=$(printf '%s' "$dep" \
+              | jq -r 'if (.env | type) == "array" then (.env | index("PREVIEW_DB_ISOLATED") != null) else "unknown" end')
+            if [[ "$isolated" == "false" ]]; then
+              echo "::notice::Deployment $id was built before its preview database existed (no PREVIEW_DB_ISOLATED in its environment) — neon-preview ensure redeploys it, and that run covers this commit. Tests skip, and the alias is left alone (IT-913)."
+              echo "stale=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
 
           # IS THIS DEPLOYMENT ALREADY SUPERSEDED?
           #
@@ -254,6 +360,10 @@ jobs:
         shell: bash
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          # For the pull request state check below (IT-975); the caller's job
+          # already grants `pull-requests: write` for the comment step.
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.r.outputs.pr-number }}
           ALIAS_HOST: ${{ steps.r.outputs.alias-host }}
           DEPLOYMENT_ID: ${{ steps.r.outputs.deployment-id }}
           GIT_REF: ${{ steps.r.outputs.git-ref }}
@@ -262,6 +372,39 @@ jobs:
           DRY_RUN: ${{ inputs.dry-run }}
         run: |
           set -o pipefail
+
+          # THE PULL REQUEST MAY HAVE BEEN CLOSED WHILE THIS RUN WAITED (IT-975).
+          #
+          # `unalias` runs on `pull_request: closed` and detaches the domain. A
+          # `deployment_status` run that STARTED before the close but reached
+          # this point after it would re-attach the alias — and from then on the
+          # closed pull request's link shows a live preview, its host stays on
+          # the Vercel project, and its certificate keeps renewing (IT-969).
+          # Measured 2026-09-23 on GuestGuru/gg-sales#54 (unalias at 14:09:59,
+          # this step aliased at 14:10:19) and #43 (unalias at 17:16:52, aliased
+          # at 17:17:13, from a run started at 17:15:09): in the self-hosted
+          # queue finishing order is not starting order — the IT-780 mechanism.
+          # The recency check below cannot see it: the deployment is still the
+          # newest one for its ref.
+          #
+          # So the pull request's state is measured here, immediately before the
+          # write. `closed` (merged or not) means no alias and `stale=true`, so
+          # the caller's smoke skips exactly as on a superseded deployment. This
+          # narrows the race to one API call and cannot close it; the daily
+          # `preview-hosztok` measurement (IT-970) covers the remainder.
+          #
+          # Undecidable (API error, no state field) means open, like every other
+          # undecidable case in this workflow: a leftover host is a doctor
+          # finding the next morning, a skipped smoke on a healthy pull request
+          # is a missing required status and a silently BLOCKED merge.
+          if [[ "$DRY_RUN" != "true" && "$PR" =~ ^[0-9]+$ ]]; then
+            state=$( { gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}" --jq '.state // empty' 2>/dev/null || true; } )
+            if [[ "$state" == "closed" ]]; then
+              echo "::notice::Pull request #$PR is closed — leaving the alias alone (IT-975); its unalias run has detached (or is detaching) the domain."
+              echo "stale=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
 
           # The recency check above ran BEFORE checkout and `npm ci` — roughly
           # forty seconds ago, and longer when the runner queues. A deployment

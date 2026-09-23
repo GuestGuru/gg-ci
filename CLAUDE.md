@@ -16,7 +16,7 @@ Node ≥ 24. Nincs lint és nincs build lépés.
 
 ```bash
 npm ci
-npm test            # vitest run — 12 fájl, 150 teszt, ~2 s (mérve 2026-09-23)
+npm test            # vitest run — 12 fájl, 151 teszt, ~1 s (mérve 2026-09-23)
 npm run typecheck
 npm run gg-ci -- <parancs> …     # preview CLI: ensure | destroy | refresh-ttl |
                                  # reset-shared | alias-set | alias-remove
@@ -75,58 +75,49 @@ A repó térképe:
   a saját runner aludhat. A változó törlése az egylépéses vészfék (IT-570).
 - **Saját runneren nincs `setup-node` cache** (IT-966): a gg-ci workflow-iban
   `cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}` +
-  `package-manager-cache: false`, a hívók fix `gg-runner` jobjaiban nincs `cache:`.
-  A perzisztens runner `~/.npm`-je megmarad, a GitHub-cache ott ~1 GB letöltés volt,
-  jobonként 50–100 s (a jobidő 70–80%-a). Új workflow-ban se tedd vissza. **A policy
-  ellenőrzi** (IT-974, `validateRunnerInvariants`): minden inventory-fájl minden
-  gg-runneres jobján (`runs-on`-ban `gg-runner` vagy `GG_CI_RUNNER`) a `cache:`
-  tilos (csak a fenti feltételes alak megy át), a `package-manager-cache: false`
-  pedig ott kötelező, ahol a cél-repó gyökér `package.json`-ja `packageManager`-t
-  deklarál (ma: tools, gg-tracker) — pontosan ekkor kapcsolná vissza a setup-node v5.
+  `package-manager-cache: false`, a hívók fix `gg-runner` jobjaiban nincs `cache:`
+  (a perzisztens `~/.npm` megmarad, a GitHub-cache ott ~1 GB, 50–100 s jobonként).
+  **A policy ellenőrzi** (IT-974, `validateRunnerInvariants`), a `packageManager`-es
+  repókban (tools, gg-tracker) a `package-manager-cache: false` kötelező.
 - **Saját runneren a `pnpm/action-setup` `dest`-je `${{ runner.temp }}/setup-pnpm`**
-  (IT-971). A default `~/setup-pnpm` a két runner-példány közös HOME-jában van, az
-  action pedig minden jobban törli és újratelepíti, így két egyszerre induló job
-  egymás alól törli a pnpm-et. **A policy ellenőrzi** (IT-974): gg-runneres jobban a
-  `pnpm/action-setup` `with.dest`-je pontosan ez kell legyen, különben a policy-gate
-  megnevezi a fájlt, a jobot és a lépést. Mérve 2026-09-23: a 12 ruleset-repó
-  `main`-jén 35 gg-runneres job, 35 setup-node és 8 pnpm lépés, nulla sértés.
-- **Saját runneren a `services:` konténer nem köthet fix host-portot** (IT-924). A két
-  runner-példány közös Docker-daemont használ: `5432:5432` mellett két párhuzamos job
-  közül a második `docker start`-ja bukik, és a main `GG deployment gate`-je is elesett
-  már. Helyesen `ports: - 5432`, az elérés `localhost:${{ job.services.<név>.ports['5432'] }}`
-  (a job a hoszton fut, nincs `container:`). Hívói hash jóváhagyásakor ezt is nézd meg —
-  ezt a policy (IT-974) NEM ellenőrzi.
-- **Elavult (`stale`) preview-futás nem nyúl az aliashoz** (IT-780) — a sorban álló
-  futások befejezési sorrendje megfordulhat, és a felülírt alias halott deploymentre
-  mutatna. A `stale` outputot **két** mérés táplálja: egy olcsó a checkout előtt, egy
-  közvetlenül az alias-írás előtt (IT-810). A hívó smoke-ja a PR-számra ÉS a
-  `stale`-re kapuzzon; a `preview-url` ürességére **ne** — az pont a valódi hibát
-  nyelné el.
+  (IT-971): a default `~/setup-pnpm` a két runner-példány közös HOME-ja, és az action
+  minden jobban törli — két egyszerre induló job egymás alól törli a pnpm-et. **A
+  policy ellenőrzi** (IT-974). A `services:` konténer viszont **nem köthet fix
+  host-portot** (IT-924, közös Docker-daemon): `ports: - 5432` +
+  `localhost:${{ job.services.<név>.ports['5432'] }}` — ezt a policy NEM ellenőrzi,
+  hívói hash jóváhagyásakor nézd meg.
+- **A `preview.yml` `stale`-döntései** (részletek a README „Preview domain" részében):
+  a deploy UTÁN nyíló PR-t a PR-feloldás ≤2 percig várja a GitHub
+  `commits/{sha}/pulls`-ból (IT-983; auto-újratrigger szándékosan nincs, IT-985 —
+  hiányzó smoke gate-nél előbb a runner-sort mérd, jobs API `started_at`); elavult
+  futás nem nyúl az aliashoz, és a `stale`-t két mérés táplálja, egy a checkout előtt,
+  egy az írás előtt (IT-780/IT-810); per-PR adatbázisos hívó `preview-db: true`-val
+  jelzi, hogy a `PREVIEW_DB_ISOLATED` nélkül épült deploy `stale` (IT-913); lezárt
+  PR-re az `Attach alias` nem ír (IT-975, a `pulls/{n}` `.state` az írás előtt).
+  Olvashatatlan állapot minden ágon = nem stale. A hívó smoke-ja a PR-számra ÉS a
+  `stale`-re kapuzzon, a `preview-url` ürességére ne — az a valódi hibát nyelné el.
 - **Minden action-referencia SHA-ra van pinelve** (IT-277), és a policy-evaluátorok
   üres `NODE_OPTIONS`-szel, `npm ci --ignore-scripts --userconfig=/dev/null`-lal
   futnak: a cél-repó npm-konfigurációja nem kerülhet a bizalmi útvonalba.
 - A saját `ci.yml` szándékosan `ubuntu-latest`-en fut, és soha nem fogyaszt secretet,
   és soha nem használ `pull_request_target`-et (publikus repó, fork-PR-ek).
 
-## Jelen állapot (2026-09-15)
+## Jelen állapot (2026-09-23)
 
-Mérve ma: az org-ruleset (a „default branch delivery gate") **12 repót** fed le
-(`gg-sales`, `gg-design`, `BPDBv2`, `gg-agents`, `tools`, `irnok`, `gg-ci`,
-`gg-tracker`, `gg-mcp`, `gg-share`, `gg-ops`, `ainita`), kötelező checkje a
-`quality-gate / verify`, és a `policy-gate.yml` pinje a `main` HEAD-jén áll
-(nincs elavult pin). Egy második ruleset a `GG smoke gate` commit statust követeli
-meg 10 repón (a `gg-ci` és a `gg-mcp` nélkül). A privát repók CI-ja saját
-(self-hosted) runneren fut, a publikus gg-ci sajátja a felhőben — **két kivétellel**
-(mérve 2026-09-23, a `runs-on` sorokból): a `gg-sales` `ci` jobja
+Az org-ruleset (a „default branch delivery gate") **12 repót** fed le (`gg-sales`,
+`gg-design`, `BPDBv2`, `gg-agents`, `tools`, `irnok`, `gg-ci`, `gg-tracker`, `gg-mcp`,
+`gg-share`, `gg-ops`, `ainita`), kötelező checkje a `quality-gate / verify`; egy
+második ruleset a `GG smoke gate` commit statust követeli meg 10 repón (a `gg-ci` és a
+`gg-mcp` nélkül). A privát repók CI-ja saját (self-hosted) runneren fut, a publikus
+gg-ci sajátja a felhőben — két kivétel (mérve 2026-09-23): a `gg-sales` `ci` jobja
 `blacksmith-8vcpu-ubuntu-2404`-en, a `BPDBv2` mindhárom workflow-ja
-`blacksmith-2vcpu-ubuntu-2404`-en fut; a takarék-kapcsoló
-(`GG_CI_STANDBY`) ma nincs beállítva, tehát normál mód van. A `preview-alias.yml`
-2026-09-10 óta nincs (hívó nélkül maradt, IT-761). `npm test`: 140/140 zöld.
-A repó 99 commitja túlnyomórészt jóváhagyott hash-bővítés — a mai szerkezet
+`blacksmith-2vcpu-ubuntu-2404`-en. A takarék-kapcsoló (`GG_CI_STANDBY`) nincs
+beállítva. A `preview-alias.yml` 2026-09-10 óta nincs (IT-761). A szerkezet
 2026-07-18 (preview-DB CLI) → 07-23 (quality gate, IT-244) → 07-25 (preview.yml,
 policy-leltár) → 09-10 (saját runner, IT-570) → 09-11/14 (stale-javítások,
-IT-780/IT-810) → 09-23 (gg-runner invariánsok a policyban, IT-974 — a `main`-en
-van, a következő ruleset re-pinnel élesedik) lépésekben állt össze.
+IT-780/IT-810) → 09-23 (gg-runner invariánsok a policyban, IT-974; preview-db,
+késői PR, lezárt PR — IT-913/983/975; mind a 9 per-PR DB-s hívó `preview-db: true`)
+lépésekben állt össze.
 
 ## Hol van a többi tudás
 
@@ -145,7 +136,8 @@ van, a következő ruleset re-pinnel élesedik) lépésekben állt össze.
   Kulcsszavak: `workflow-policy`, `quality-gate`, `GG smoke gate`, `GG_CI_STANDBY`,
   `candidate-SHA`, `re-pin`, `self-hosted runner`.
 - **Linear**: „Auth/Tools/CI/Tokens" projekt. Sarokkövek: IT-244, IT-253, IT-271,
-  IT-277, IT-278, IT-283, IT-285, IT-295, IT-570, IT-594, IT-761, IT-780, IT-810.
+  IT-277, IT-278, IT-283, IT-285, IT-295, IT-570, IT-594, IT-761, IT-780, IT-810,
+  IT-913, IT-974, IT-975, IT-983.
 - **Kapcsolódó repók**: minden fogyasztó (`tools`, `irnok`, `gg-tracker`, `gg-sales`,
   `gg-design`, `BPDBv2`, `gg-agents`, `gg-share`, `gg-mcp`, `gg-ops`, `ainita`), és a
   `tools/packages/delivery-doctor`, ami naponta méri a bekötések driftjét.

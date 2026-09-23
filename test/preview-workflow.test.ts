@@ -46,15 +46,29 @@ describe('preview.yml — az elavulás-jelzés útja a hívókig', () => {
 		expect(workflowCall?.outputs?.stale?.value).toContain('jobs.preview.outputs.stale')
 	})
 
-	it('a késői elavulás-ág `stale=true`-t ír, mielőtt kilép', () => {
+	// Az alias-lépés egy kilépő ága a jelzőjétől a saját `exit 0`-jáig.
+	const exitingBranch = (marker: string) => {
 		const run = aliasStep?.run ?? ''
-		const branch = run.slice(
-			run.indexOf('became newer while this run was preparing'),
-			run.indexOf('exit 0'),
-		)
+		const start = run.indexOf(marker)
+		return start < 0 ? '' : run.slice(start, run.indexOf('exit 0', start))
+	}
+
+	it('a késői elavulás-ág `stale=true`-t ír, mielőtt kilép', () => {
+		const branch = exitingBranch('became newer while this run was preparing')
 		expect(branch).not.toBe('')
 		expect(branch).toContain('stale=true')
 		expect(branch).toContain('$GITHUB_OUTPUT')
+	})
+
+	it('a lezárt-PR-ág is `stale=true`-t ír, mielőtt kilép (IT-975)', () => {
+		// A zárás `unalias` futása és egy korábban indult `deployment_status`
+		// futás a runner-sorban helyet cserélhet (gg-sales#43, #54): az alias
+		// írása előtt a PR állapota is mérés, és a hívó smoke-ja ugyanúgy kimarad.
+		const branch = exitingBranch('is closed — leaving the alias alone')
+		expect(branch).not.toBe('')
+		expect(branch).toContain('stale=true')
+		expect(branch).toContain('$GITHUB_OUTPUT')
+		expect(aliasStep?.run).toContain('pulls/${PR}')
 	})
 
 	it('elavult deploymenten nem fut az alias-lépés (IT-780)', () => {
