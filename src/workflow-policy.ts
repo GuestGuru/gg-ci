@@ -171,15 +171,15 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/tools': {
 		'.github/workflows/ci.yml':
-			'c52bfe0bcda736852d838bd90d8e087b97f229ffa5d37232751fe0640e6b54a9',
+			'0f077278104ce91ed2774e4b6310c42b77fdbd69eb401e1c3c2fd1de120fca91',
 		'.github/workflows/delivery-doctor.yml':
 			'46a6f754476399e6015a81bffb32eec7230df34a8f966a4cd805a85a9e5d09ea',
 		'.github/workflows/preview-alias.yml':
-			'df9f066fb147e54a523a1ca985e5f4e838e86c52901bb7141b2247b89c214e4c',
+			'9bebf1c2be87a66c9f166de8f33c71341dadeb0206e5a80816969238c01fd5da',
 		'.github/workflows/preview-db.yml':
 			'993326888ae69ac03f42f7493c7446c2206a5ebb150c5198ca8051f9bf31e07f',
 		'.github/workflows/publish-auth.yml':
-			'925b09434d44a4b018a8ba4dcbf1e9985f77e697b008d1a4e6d365176dbbdb95',
+			'e92dd66174e030a3b2c6704d183dd4e752c7d1589041923f90b0b0d6ca1a60b8',
 		'.github/workflows/token-expiry.yml':
 			'25e0fd53ed3c0c84649e8cf8248e0ca9fc2dc94559ffb0ce5c82e0325c6fc531',
 	},
@@ -193,9 +193,9 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/gg-tracker': {
 		'.github/workflows/ci.yml':
-			'e9404bdeb15ebfb1b1eac89c19a9b499aecdaa9341c4023ff475b16aeccf9599',
+			'2fd620082cc053732e30ac8c9c706cc75089916fe6ad2347d8c06581d4e66653',
 		'.github/workflows/preview-alias.yml':
-			'427973792af22e420863dce4b2a191bd0047cc167439f3e2fee3730e2fb57a1b',
+			'9bd1d939de523ae68f41a0b7fd4abbc019dbe7f612106979cb67ffb12126d1b4',
 		'.github/workflows/preview-db.yml':
 			'5ce68336d44583d84b9389e7565ad6b68456755dbb451b4e1d686ccdb230ebca',
 	},

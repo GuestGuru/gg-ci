@@ -78,6 +78,10 @@ A repó térképe:
   `package-manager-cache: false`, a hívók fix `gg-runner` jobjaiban nincs `cache:`.
   A perzisztens runner `~/.npm`-je megmarad, a GitHub-cache ott ~1 GB letöltés volt,
   jobonként 50–100 s (a jobidő 70–80%-a). Új workflow-ban se tedd vissza.
+- **Saját runneren a `pnpm/action-setup` `dest`-je `${{ runner.temp }}/setup-pnpm`**
+  (IT-971). A default `~/setup-pnpm` a két runner-példány közös HOME-jában van, az
+  action pedig minden jobban törli és újratelepíti, így két egyszerre induló job
+  egymás alól törli a pnpm-et. Hívói hash jóváhagyásakor ezt is nézd meg.
 - **Elavult (`stale`) preview-futás nem nyúl az aliashoz** (IT-780) — a sorban álló
   futások befejezési sorrendje megfordulhat, és a felülírt alias halott deploymentre
   mutatna. A `stale` outputot **két** mérés táplálja: egy olcsó a checkout előtt, egy
