@@ -96,6 +96,13 @@ const policies: Record<string, WorkflowPolicy> = {
 		uses: centralGate,
 		statusContext: 'GG deployment gate',
 	},
+	// gg-brain — a céges agy (memória + hibrid kereső), IT-1018.
+	'GuestGuru/gg-brain': {
+		workflowPath: '.github/workflows/ci.yml',
+		requiredNeeds: ['ci'],
+		uses: centralGate,
+		statusContext: 'GG deployment gate',
+	},
 }
 
 const approvedWorkflowInventories: Record<string, Record<string, string>> = {
@@ -198,6 +205,14 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 			'5595e8264e7d0db1d9c6f317a79a600d5f3d83fa0e5fba58c5d2b4a36b46588d',
 		'.github/workflows/preview-db.yml':
 			'5ce68336d44583d84b9389e7565ad6b68456755dbb451b4e1d686ccdb230ebca',
+	},
+	'GuestGuru/gg-brain': {
+		'.github/workflows/ci.yml':
+			'b8a148a219efd6c21ae51923903608f9cc39477f34ca9837fc53843fc8e8d82a',
+		'.github/workflows/preview-alias.yml':
+			'20c2d755a9a1d5d0203a774c8bdc3ee19116ce9b2db3d17d4a4d4646a722ef36',
+		'.github/workflows/preview-db.yml':
+			'731402cda7d6cc6f0eee8212e42b3fdeef2ecd546e1ce430eac525c92e07ad06',
 	},
 }
 
