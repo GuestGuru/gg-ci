@@ -80,16 +80,16 @@ const policies: Record<string, WorkflowPolicy> = {
 		requiredNeeds: ['test'],
 		uses: './.github/workflows/quality-gate.yml',
 	},
-	// A gg-mcp NEM Vercel-projekt (systemd a marveenen), tehát a szabványból csak
-	// a merge-kapu értelmezhető rá — a `GG deployment gate` status-contextet mégis
-	// megtartja, mert az org-ruleset ezt a nevet követeli.
+	// A gg-mcp NEM Vercel-projekt (systemd-szolgáltatás saját hoston), tehát a
+	// szabványból csak a merge-kapu értelmezhető rá — a `GG deployment gate`
+	// status-contextet mégis megtartja, mert az org-ruleset ezt a nevet követeli.
 	'GuestGuru/gg-mcp': {
 		workflowPath: '.github/workflows/ci.yml',
 		requiredNeeds: ['ci'],
 		uses: centralGate,
 		statusContext: 'GG deployment gate',
 	},
-	// gg-share — védett statikus oldalak megosztása (share.guest.guru).
+	// gg-share — védett statikus oldalak megosztása (saját aldomainen).
 	'GuestGuru/gg-share': {
 		workflowPath: '.github/workflows/ci.yml',
 		requiredNeeds: ['ci'],

@@ -41,7 +41,9 @@ A repó térképe:
 
 - **Ebbe a repóba nem kerül infrastruktúra-azonosító**: Vercel/Neon projekt- vagy
   team-ID, connection string, domain, token, app-specifikus default érték. Minden
-  ilyen workflow-input. Ellenőrzés: `git grep -icE 'prj_|team_|neondb_owner'` → 0.
+  ilyen workflow-input. Ellenőrzés: `git grep -nE 'prj_[A-Za-z0-9]{10,}|team_[A-Za-z0-9]{10,}|neondb_owne[r]|guest\.guru'`
+  → üres (a tesztek `prj_1`/`team_1` helyőrzői és a `VERCEL_TEAM_ID` input-nevek
+  nem azonosítók; a régi `prj_|team_` minta ezekre is talált — mérve 2026-09-24).
   Emiatt nem lehet privát sem: a reusable workflow-k saját magukat checkoutolják a
   HÍVÓ `GITHUB_TOKEN`-jével, ami privát gg-ci-t nem lát (IT-285, élesben mérve).
 - **A fogyasztó repók PR-jai nem módosíthatják a saját `.github/workflows/`
