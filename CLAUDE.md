@@ -131,7 +131,7 @@ lépésekben állt össze.
 - **`docs/superpowers/specs/2026-07-23-it-244-gg-ci-upgrade-design.md`** és a
   `docs/superpowers/plans/` három terve — az eredeti kapu-tervezés és a mért
   kiindulóállapot.
-- **Agent-memória**: `memory_smart_search "gg-ci"` — a döntéstörténet, a ruleset- és
+- **Agent-memória** (`memoria` skill): keresés „gg-ci" — a döntéstörténet, a ruleset- és
   runner-azonosítók, a költség-mérések és a leckék ott élnek (`project: gg-ci`).
   Kulcsszavak: `workflow-policy`, `quality-gate`, `GG smoke gate`, `GG_CI_STANDBY`,
   `candidate-SHA`, `re-pin`, `self-hosted runner`.
