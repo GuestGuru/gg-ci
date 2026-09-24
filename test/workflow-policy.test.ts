@@ -72,6 +72,12 @@ describe('workflow policy', () => {
 			statusContext: 'GG deployment gate',
 		})
 		expect(policyForRepository('GuestGuru/tools')?.requiredNeeds).toEqual(['ci'])
+		expect(policyForRepository('GuestGuru/gg-brain')).toEqual({
+			workflowPath: '.github/workflows/ci.yml',
+			requiredNeeds: ['ci'],
+			uses: 'GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main',
+			statusContext: 'GG deployment gate',
+		})
 		expect(policyForRepository('GuestGuru/irnok')?.requiredNeeds).toEqual([
 			'web',
 			'cloud-function',
