@@ -11,6 +11,8 @@ export interface AliasSetResult {
 	url: string
 	alreadyAssigned: boolean
 	domainAdded: boolean
+	/** The git branch the host is bound to — empty in dry-run. */
+	gitBranch: string
 }
 
 /**
@@ -61,22 +63,42 @@ async function assignWithCertRetry(
  *
  * Attaching the host to the project is part of the job: a per-PR hostname does
  * not exist until the PR does, so it cannot have been added by hand up front.
+ *
+ * The host is bound to the deployment's git branch (IT-1046). Without the binding it
+ * is a production domain, and the next production deployment takes it over — the PR
+ * link then serves the live site and the production database while still looking
+ * like the PR. The branch comes from the deployment itself, so the caller workflows
+ * need no new input; a production deployment, or one without a git branch, is refused
+ * rather than aliased unbound.
  */
 export async function aliasSet(deps: VercelCommandDeps, params: AliasSetParams): Promise<AliasSetResult> {
 	const { deploymentId, aliasHost, dryRun } = params
 	const url = `https://${aliasHost}`
 
 	if (dryRun) {
-		deps.log(`[dry-run] would add ${aliasHost} to the project`)
+		deps.log(`[dry-run] would add ${aliasHost} to the project, bound to the deployment's git branch`)
 		deps.log(`[dry-run] would alias ${aliasHost} → deployment ${deploymentId}`)
-		return { url, alreadyAssigned: false, domainAdded: false }
+		return { url, alreadyAssigned: false, domainAdded: false, gitBranch: '' }
 	}
 
-	const domain = await deps.vercel.addProjectDomain(aliasHost)
-	if (domain.alreadyPresent) {
-		deps.log(`= ${aliasHost} is already attached to the project`)
+	const deployment = await deps.vercel.getDeployment(deploymentId)
+	if (deployment.target === 'production') {
+		throw new Error(`${deploymentId} is a production deployment — refusing to alias the preview host ${aliasHost} to it`)
+	}
+	const gitBranch = deployment.gitBranch
+	if (!gitBranch) {
+		throw new Error(
+			`${deploymentId} has no git branch — ${aliasHost} would become an unbound (production) domain, refusing`,
+		)
+	}
+
+	const domain = await deps.vercel.addProjectDomain(aliasHost, gitBranch)
+	if (!domain.alreadyPresent) {
+		deps.log(`+ Added ${aliasHost} to the project, bound to ${gitBranch} (verified=${domain.verified})`)
+	} else if (domain.rebound) {
+		deps.log(`~ ${aliasHost} was already attached — re-bound to ${gitBranch}`)
 	} else {
-		deps.log(`+ Added ${aliasHost} to the project (verified=${domain.verified})`)
+		deps.log(`= ${aliasHost} is already attached to the project, bound to ${gitBranch}`)
 	}
 	if (!domain.verified) {
 		// A sub-domain of an apex the team owns comes back verified straight away; an
@@ -91,5 +113,5 @@ export async function aliasSet(deps: VercelCommandDeps, params: AliasSetParams):
 			: `+ Aliased ${aliasHost} → ${deploymentId}`,
 	)
 
-	return { url, alreadyAssigned, domainAdded: !domain.alreadyPresent }
+	return { url, alreadyAssigned, domainAdded: !domain.alreadyPresent, gitBranch }
 }
