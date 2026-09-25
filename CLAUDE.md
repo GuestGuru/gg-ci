@@ -16,7 +16,7 @@ Node ≥ 24. Nincs lint és nincs build lépés.
 
 ```bash
 npm ci
-npm test            # vitest run — 12 fájl, 151 teszt, ~1 s (mérve 2026-09-23)
+npm test            # vitest run — 12 fájl, 163 teszt, ~1 s (mérve 2026-09-25)
 npm run typecheck
 npm run gg-ci -- <parancs> …     # preview CLI: ensure | destroy | refresh-ttl |
                                  # reset-shared | alias-set | alias-remove
@@ -88,6 +88,13 @@ A repó térképe:
   host-portot** (IT-924, közös Docker-daemon): `ports: - 5432` +
   `localhost:${{ job.services.<név>.ports['5432'] }}` — ezt a policy NEM ellenőrzi,
   hívói hash jóváhagyásakor nézd meg.
+- **A PR-hoszt sima deployment-alias, SOHA nem projekt-domain** (IT-1046, mérve
+  2026-09-25): a kötetlen projekt-domain production-domain (minden prod-deploy elviszi, a
+  PR-link az éles kódot és DB-t mutatja); a git-ághoz kötött preview-domain, a Vercel-védelem
+  302/401-et ad a smoke-nak (gg-ci#93 → #94). Az `alias-set` sima aliast ír, és alias-szintű
+  Deployment Protection Exceptiont tesz rá (`alias-protection-override`), ha a projekt
+  védelme szűkebb az `all`-nál. Elutasítja a nem PR-hosztot (`<app>-pr-<n>.…`), a production
+  és az idegen projekt deployját, és a más projekt aliasát; a régi projekt-domaint leválasztja.
 - **A `preview.yml` `stale`-döntései** (részletek a README „Preview domain" részében):
   a deploy UTÁN nyíló PR-t a PR-feloldás ≤2 percig várja a GitHub
   `commits/{sha}/pulls`-ból (IT-983; auto-újratrigger szándékosan nincs, IT-985 —

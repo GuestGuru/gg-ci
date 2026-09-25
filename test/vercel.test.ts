@@ -87,41 +87,58 @@ describe('VercelClient', () => {
 		expect(JSON.parse(init.body)).toEqual({ deploymentId: 'dpl_1', name: 'my-project' })
 	})
 
-	it('hozzáadja a domaint a projekthez', async () => {
+	it('a deployment projektjét és targetjét olvassa', async () => {
+		fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'dpl_1', projectId: 'prj_1', target: 'production', url: 'x' }))
+
+		expect(await client().getDeployment('dpl_1')).toEqual({ id: 'dpl_1', projectId: 'prj_1', target: 'production' })
+		expect(mockCallArgs(fetchMock)[0]).toBe('https://api.vercel.com/v13/deployments/dpl_1?teamId=team_1')
+	})
+
+	it('a preview deployment targetje null', async () => {
+		fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'dpl_1', projectId: 'prj_1', target: null }))
+
+		expect((await client().getDeployment('dpl_1')).target).toBeNull()
+	})
+
+	it('a projekt védelmi scope-jait olvassa (null = kikapcsolva)', async () => {
 		fetchMock.mockResolvedValueOnce(
-			jsonResponse({ name: 'pr-12.preview.example.com', apexName: 'example.com', verified: true }),
+			jsonResponse({ ssoProtection: { deploymentType: 'all_except_custom_domains' }, passwordProtection: null }),
 		)
 
-		const result = await client().addProjectDomain('pr-12.preview.example.com')
+		expect(await client().getProjectProtection()).toEqual({ sso: 'all_except_custom_domains', password: null })
+		expect(mockCallArgs(fetchMock)[0]).toBe('https://api.vercel.com/v9/projects/prj_1?teamId=team_1')
+	})
+
+	it('egy aliast hosztnév szerint, team-szinten olvas; a 404 null', async () => {
+		fetchMock
+			.mockResolvedValueOnce(jsonResponse({ uid: 'a1', alias: 'myapp-pr-12.preview.example.com', projectId: 'prj_2' }))
+			.mockResolvedValueOnce(new Response('', { status: 404 }))
+
+		expect((await client().getAlias('myapp-pr-12.preview.example.com'))?.projectId).toBe('prj_2')
+		expect(mockCallArgs(fetchMock)[0]).toBe(
+			'https://api.vercel.com/v4/aliases/myapp-pr-12.preview.example.com?teamId=team_1',
+		)
+		expect(await client().getAlias('myapp-pr-13.preview.example.com')).toBeNull()
+	})
+
+	it('védelmi kivételt tesz az aliasra', async () => {
+		fetchMock.mockResolvedValueOnce(jsonResponse({ protectionBypass: { '*': { scope: 'alias-protection-override' } } }))
+
+		expect(await client().createAliasProtectionOverride('a1')).toBe(true)
 
 		const [url, init] = mockCallArgs(fetchMock)
-		expect(url).toBe('https://api.vercel.com/v10/projects/prj_1/domains?teamId=team_1')
-		expect(init.method).toBe('POST')
-		expect(JSON.parse(init.body)).toEqual({ name: 'pr-12.preview.example.com' })
-		expect(result).toEqual({ alreadyPresent: false, verified: true })
+		expect(url).toBe('https://api.vercel.com/aliases/a1/protection-bypass?teamId=team_1')
+		expect(init.method).toBe('PATCH')
+		expect(JSON.parse(init.body)).toEqual({ override: { scope: 'alias-protection-override', action: 'create' } })
 	})
 
-	it('idempotens: a projekten már meglévő domain (400) nem hiba', async () => {
+	it('a már meglévő kivétel (400 exception_already_exists) nem hiba, a többi 400 igen', async () => {
 		fetchMock
-			.mockResolvedValueOnce(
-				jsonResponse({ error: { code: 'domain_already_in_use' } }, 400),
-			)
-			// A megerősítő lekérdezés: a domain tényleg EZEN a projekten van.
-			.mockResolvedValueOnce(jsonResponse({ name: 'pr-12.preview.example.com', verified: true }))
+			.mockResolvedValueOnce(jsonResponse({ error: { code: 'exception_already_exists' } }, 400))
+			.mockResolvedValueOnce(jsonResponse({ error: { code: 'bad_request' } }, 400))
 
-		expect(await client().addProjectDomain('pr-12.preview.example.com')).toEqual({
-			alreadyPresent: true,
-			verified: true,
-		})
-	})
-
-	it('dob, ha a domain MÁS projekthez tartozik (409) — ezt nem szabad elnyelni', async () => {
-		fetchMock
-			.mockResolvedValueOnce(jsonResponse({ error: { code: 'domain_already_in_use' } }, 409))
-			// A megerősítő lekérdezés 404: a domain nincs a mi projektünkön.
-			.mockResolvedValueOnce(new Response('not found', { status: 404 }))
-
-		await expect(client().addProjectDomain('pr-12.preview.example.com')).rejects.toThrow(/409/)
+		expect(await client().createAliasProtectionOverride('a1')).toBe(false)
+		await expect(client().createAliasProtectionOverride('a1')).rejects.toThrow(/400/)
 	})
 
 	it('leválasztja a domaint a projektről', async () => {

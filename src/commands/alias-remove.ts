@@ -13,6 +13,11 @@ export interface AliasRemoveResult {
 /**
  * Tears down a preview host: first the alias, then the project domain.
  *
+ * Since IT-1046 `alias-set` creates a plain deployment alias and never attaches the
+ * host to the project, so for a new host the alias is all there is — a deleted plain
+ * alias does not come back (measured 2026-09-25). The project-domain step stays for
+ * hosts attached before IT-1046, for which the following holds.
+ *
  * Removing the alias alone is not enough, and the leftover state is worse than a
  * 404. A domain attached to a project without a git-branch binding falls back to
  * the **production** deployment on its own, so Vercel silently re-creates the

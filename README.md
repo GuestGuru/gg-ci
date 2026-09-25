@@ -487,9 +487,21 @@ different registrable domain. On the generated preview URL the app therefore loo
 permanently logged out, and no amount of app-side configuration fixes it. Moving the
 preview onto a subdomain of the cookie's domain makes the existing session reach it.
 
-`alias-set` attaches the hostname to the Vercel project itself before aliasing it — a
-per-PR host (`myapp-pr-12.preview.example.com`) does not exist until the PR does, so it
-cannot be added by hand in advance.
+`alias-set` points the host at the deployment as a **plain deployment alias — it never
+attaches the host to the project as a project domain** (IT-1046, see "Vercel alias API
+notes"). A project domain without a git-branch binding is a *production* domain that
+every production deployment takes over; one bound to the PR's branch is a *preview*
+domain behind Deployment Protection. A plain alias is neither: production deployments
+leave it alone. Because a plain alias to a preview deployment *is* protected, `alias-set`
+also makes it a **Deployment Protection Exception** (`alias-protection-override`) when
+the project's protection scope is narrower than `all` — so the host is exactly as
+reachable as it was when it was a project domain, and the smoke needs no bypass secret;
+the deployment's own `*.vercel.app` URLs stay protected.
+
+Before writing anything `alias-set` refuses: a host that is not a PR host (first label
+`<app>-pr-<number>`), a deployment of another project, a **production** deployment, and a
+host whose existing alias belongs to another project. A host still attached as a project
+domain from before IT-1046 is detached first, then re-created as a plain alias.
 
 The reusable workflow that runs this end to end is
 **`.github/workflows/preview.yml`** — it resolves the pull request and the Vercel
@@ -506,8 +518,8 @@ domain to the team first.
 
 | Command | When | What it does |
 |---|---|---|
-| `alias-set` | `deployment_status` = success | Points `alias-host` at the given deployment |
-| `alias-remove` | PR closed / merged | Removes the alias **and** detaches `alias-host` from the project |
+| `alias-set` | `deployment_status` = success | Points `alias-host` at the given preview deployment as a plain alias, with a Deployment Protection Exception |
+| `alias-remove` | PR closed / merged | Removes the alias, and detaches `alias-host` from the project if a pre-IT-1046 host is still attached |
 
 Both are idempotent and support `dry-run`. `alias-set` re-run against a newer deployment
 moves the alias over — that is the normal path on every push. `alias-remove` succeeds when
@@ -730,8 +742,31 @@ write` the caller example already grants for the comment covers it.
 
 #### Vercel alias API notes
 
+- **A PR host must not be a project domain at all — neither unbound nor branch-bound.**
+  Measured 2026-09-25 (IT-1046) on production and on a scratch project with the team's
+  default `all_except_custom_domains` protection:
+  - an **unbound** project domain is a production domain: an open PR's `…-pr-157…` host
+    sat in the `alias` list of the two production deployments built that morning
+    (`aliasAssignedAt` 1 s after `ready`), and on the scratch project it moved to the next
+    production deployment within seconds — the PR link served the live site and the
+    production database while still looking like the PR. Even `POST /v10/projects/{id}/domains`
+    itself answers with `oldDeploymentId` = the production deployment;
+  - a **branch-bound** project domain (`gitBranch`, gg-ci#93) is a preview domain: Deployment
+    Protection covers it, and every PR smoke got 302/401 (`vercel_auth_callback`) until
+    gg-ci#94 reverted it;
+  - a **plain alias** (`POST /v2/deployments/{id}/aliases` on a host of a team-owned zone,
+    with no project domain) works on the first call, stays on its preview deployment
+    across a production deployment, and does not come back after `DELETE /v2/aliases/{uid}`.
+    It answers 302 (protected) until `PATCH /aliases/{uid}/protection-bypass` with
+    `{"override":{"scope":"alias-protection-override","action":"create"}}` makes it a
+    Deployment Protection Exception; then 200, while the deployment's `*.vercel.app` URL
+    still answers 302. The exception belongs to the alias: moving the alias to a newer
+    deployment keeps it (the `uid` is stable), deleting the alias drops it. Creating it
+    twice answers **400 `exception_already_exists`**, which `alias-set` treats as success.
+  - Detaching a project domain also deletes its alias (the host answers 404 at once) — the
+    migration path `alias-set` takes for a host attached before IT-1046.
 - **An attached domain falls back to production on its own, so cleanup must remove the
-  domain too.** A domain attached to a project with no git-branch binding is served by the
+  domain too** (hosts attached before IT-1046; `alias-set` no longer attaches any). A domain attached to a project with no git-branch binding is served by the
   latest **production** deployment whenever nothing else claims it. Deleting only the alias
   is therefore temporary: Vercel re-creates it against production within moments, and the
   closed PR's link answers **200 with the live site**. That is worse than a 404 — the link
@@ -776,12 +811,10 @@ write` the caller example already grants for the comment covers it.
   quota safe is therefore `alias-remove` detaching the host; a host left attached after its
   PR closed keeps renewing its own certificate. A host that has both a per-host and the
   wildcard certificate may be served either one by the edge; both are valid.
-- **Adding the domain is idempotent, but the status code cannot be what decides that.**
-  A domain already on *this* project fails with **400**, whereas **409** means it belongs
-  to *another* Vercel project. Accepting 409 as "already there" would silently alias into
-  a domain someone else owns. `addProjectDomain` therefore resolves a failed add by asking
-  `GET /v9/projects/{id}/domains/{host}` whether the domain is on this project: if yes the
-  add was a no-op, if no the original error is rethrown.
+- **A host held by another project must be refused before aliasing** (before IT-1046 the
+  project-domain add did this: its **409** meant "another project"). `alias-set` reads the
+  alias team-wide with `GET /v4/aliases/{host}` (404 = no alias yet) and refuses when its
+  `projectId` is not the caller's.
 - `POST /v2/deployments/{id}/aliases` answers **409** when the alias already points at
   *that same* deployment. It is the success case for a re-run, not a failure, so the CLI
   treats it as such. An alias held by a *different* deployment is moved over with a 200 —
