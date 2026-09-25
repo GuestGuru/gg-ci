@@ -8,7 +8,8 @@ function certMissing(): VercelApiError {
 
 function makeDeps() {
 	const vercel = {
-		addProjectDomain: vi.fn().mockResolvedValue({ alreadyPresent: false, verified: true }),
+		getDeployment: vi.fn().mockResolvedValue({ id: 'dpl_1', target: null, gitBranch: 'feat/pr-12' }),
+		addProjectDomain: vi.fn().mockResolvedValue({ alreadyPresent: false, verified: true, rebound: false }),
 		assignAlias: vi.fn().mockResolvedValue({ alreadyAssigned: false }),
 	}
 	// Never actually waits — records the requested delays instead.
@@ -42,22 +43,52 @@ describe('aliasSet', () => {
 	it('hozzáadja a domaint a projekthez, aliast rendel, és visszaadja a https URL-t', async () => {
 		const result = await aliasSet(ctx.deps, PARAMS)
 
-		expect(ctx.vercel.addProjectDomain).toHaveBeenCalledWith('myapp-pr-12.preview.example.com')
+		expect(ctx.vercel.getDeployment).toHaveBeenCalledWith('dpl_1')
+		expect(ctx.vercel.addProjectDomain).toHaveBeenCalledWith('myapp-pr-12.preview.example.com', 'feat/pr-12')
 		expect(ctx.vercel.assignAlias).toHaveBeenCalledWith('dpl_1', 'myapp-pr-12.preview.example.com')
 		expect(result).toEqual({
 			url: 'https://myapp-pr-12.preview.example.com',
 			alreadyAssigned: false,
 			domainAdded: true,
+			gitBranch: 'feat/pr-12',
 		})
 	})
 
 	it('idempotens: a projekthez már hozzáadott domain nem hiba', async () => {
-		ctx.vercel.addProjectDomain.mockResolvedValue({ alreadyPresent: true, verified: true })
+		ctx.vercel.addProjectDomain.mockResolvedValue({ alreadyPresent: true, verified: true, rebound: false })
 
 		const result = await aliasSet(ctx.deps, PARAMS)
 
 		expect(ctx.vercel.assignAlias).toHaveBeenCalled()
 		expect(result.domainAdded).toBe(false)
+	})
+
+	it('a korábban ág nélkül felvett domaint átköti, és utána aliasol (IT-1046)', async () => {
+		ctx.vercel.addProjectDomain.mockResolvedValue({ alreadyPresent: true, verified: true, rebound: true })
+
+		const result = await aliasSet(ctx.deps, PARAMS)
+
+		expect(ctx.vercel.assignAlias).toHaveBeenCalledWith('dpl_1', 'myapp-pr-12.preview.example.com')
+		expect(ctx.deps.log).toHaveBeenCalledWith(expect.stringContaining('re-bound to feat/pr-12'))
+		expect(result.domainAdded).toBe(false)
+	})
+
+	it('production deploymentre nem aliasol, és a domaint sem veszi fel (IT-1046)', async () => {
+		ctx.vercel.getDeployment.mockResolvedValue({ id: 'dpl_1', target: 'production', gitBranch: 'main' })
+
+		await expect(aliasSet(ctx.deps, PARAMS)).rejects.toThrow(/production deployment/)
+
+		expect(ctx.vercel.addProjectDomain).not.toHaveBeenCalled()
+		expect(ctx.vercel.assignAlias).not.toHaveBeenCalled()
+	})
+
+	it('git-ág nélküli deploymentnél nem vesz fel kötetlen (production) domaint (IT-1046)', async () => {
+		ctx.vercel.getDeployment.mockResolvedValue({ id: 'dpl_1', target: null, gitBranch: null })
+
+		await expect(aliasSet(ctx.deps, PARAMS)).rejects.toThrow(/no git branch/)
+
+		expect(ctx.vercel.addProjectDomain).not.toHaveBeenCalled()
+		expect(ctx.vercel.assignAlias).not.toHaveBeenCalled()
 	})
 
 	it('idempotens: a már erre a deploymentre mutató alias nem hiba', async () => {
@@ -105,6 +136,7 @@ describe('aliasSet', () => {
 	it('dry-run módban egyik írás-API-t sem hívja', async () => {
 		const result = await aliasSet(ctx.deps, { ...PARAMS, dryRun: true })
 
+		expect(ctx.vercel.getDeployment).not.toHaveBeenCalled()
 		expect(ctx.vercel.addProjectDomain).not.toHaveBeenCalled()
 		expect(ctx.vercel.assignAlias).not.toHaveBeenCalled()
 		expect(result.url).toBe('https://myapp-pr-12.preview.example.com')
