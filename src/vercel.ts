@@ -23,20 +23,6 @@ export interface VercelProjectDomain {
 	name: string
 	/** `false` means a DNS challenge is outstanding — the domain cannot serve an alias yet. */
 	verified: boolean
-	/**
-	 * The git branch the domain is bound to. `null`/absent makes it a PRODUCTION domain:
-	 * Vercel moves it onto every new production deployment (IT-1046).
-	 */
-	gitBranch?: string | null
-}
-
-/** The fields of a deployment the alias flow decides on. */
-export interface VercelDeploymentInfo {
-	id: string
-	/** `'production'`, or `null` for a preview deployment. */
-	target: string | null
-	/** The git branch the deployment was built from, or null if it has no git source. */
-	gitBranch: string | null
 }
 
 /** Safety net for the alias pagination loop — one page is 100 aliases. */
@@ -177,16 +163,8 @@ export class VercelClient {
 	}
 
 	/**
-	 * Attaches `host` to the project, bound to `gitBranch`, which must happen before it
-	 * can be aliased — a per-PR hostname cannot be added by hand ahead of time.
-	 *
-	 * ⚠️ The branch binding is what keeps the host a PREVIEW domain (IT-1046). A project
-	 * domain without `gitBranch` is a production domain: Vercel reassigns it to every new
-	 * production deployment, so an open PR's preview link silently served the live site
-	 * (and the production database) after the next merge to main — measured 2026-09-25:
-	 * `tools-pr-157` pointed at the latest `main` production deployment, not at the PR's
-	 * own preview. A host already attached with a different (or no) binding is re-bound
-	 * in place.
+	 * Attaches `host` to the project, which must happen before it can be aliased —
+	 * a per-PR hostname cannot be added by hand ahead of time.
 	 *
 	 * Idempotency cannot be keyed on the status code here, and getting that wrong
 	 * would be dangerous: a domain already on *this* project fails with **400**,
@@ -195,44 +173,19 @@ export class VercelClient {
 	 * by asking whether the domain is on this project after all — if it is, the add
 	 * was a no-op; if it is not, the original error stands.
 	 */
-	async addProjectDomain(
-		host: string,
-		gitBranch: string,
-	): Promise<{ alreadyPresent: boolean; verified: boolean; rebound: boolean }> {
+	async addProjectDomain(host: string): Promise<{ alreadyPresent: boolean; verified: boolean }> {
 		try {
 			const result = await this.request<VercelProjectDomain>(
 				'POST',
 				`/v10/projects/${this.config.vercelProjectId}/domains?${this.team}`,
-				{ name: host, gitBranch },
+				{ name: host },
 			)
-			return { alreadyPresent: false, verified: result?.verified ?? false, rebound: false }
+			return { alreadyPresent: false, verified: result?.verified ?? false }
 		} catch (error) {
 			if (!(error instanceof VercelApiError)) throw error
 			const existing = await this.findProjectDomain(host)
 			if (!existing) throw error
-			if (existing.gitBranch === gitBranch) {
-				return { alreadyPresent: true, verified: existing.verified, rebound: false }
-			}
-			await this.request(
-				'PATCH',
-				`/v9/projects/${this.config.vercelProjectId}/domains/${host}?${this.team}`,
-				{ gitBranch },
-			)
-			return { alreadyPresent: true, verified: existing.verified, rebound: true }
-		}
-	}
-
-	/** Target and git branch of a deployment — what `alias-set` checks before binding a host. */
-	async getDeployment(deploymentId: string): Promise<VercelDeploymentInfo> {
-		const result = await this.request<{
-			id: string
-			target?: string | null
-			meta?: { githubCommitRef?: string }
-		}>('GET', `/v13/deployments/${deploymentId}?${this.team}`)
-		return {
-			id: result?.id ?? deploymentId,
-			target: result?.target ?? null,
-			gitBranch: result?.meta?.githubCommitRef || null,
+			return { alreadyPresent: true, verified: existing.verified }
 		}
 	}
 

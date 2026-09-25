@@ -489,11 +489,7 @@ preview onto a subdomain of the cookie's domain makes the existing session reach
 
 `alias-set` attaches the hostname to the Vercel project itself before aliasing it — a
 per-PR host (`myapp-pr-12.preview.example.com`) does not exist until the PR does, so it
-cannot be added by hand in advance. The host is attached **bound to the deployment's git
-branch** (`gitBranch`, read from the deployment's `meta.githubCommitRef`); an unbound
-host would be a production domain (see "Vercel alias API notes"). `alias-set` refuses a
-production deployment and a deployment without a git branch rather than attach an
-unbound host.
+cannot be added by hand in advance.
 
 The reusable workflow that runs this end to end is
 **`.github/workflows/preview.yml`** — it resolves the pull request and the Vercel
@@ -734,16 +730,6 @@ write` the caller example already grants for the comment covers it.
 
 #### Vercel alias API notes
 
-- **A project domain without `gitBranch` is a production domain — an open PR's host must
-  be bound to its branch.** Vercel assigns every unbound, non-redirect project domain to
-  each new **production** deployment, next to the real production host. Measured
-  2026-09-25 (IT-1046): an open PR's `…-pr-157…` host sat in the `alias` list of the two
-  production deployments built that morning (`aliasAssignedAt` 1 s after `ready`), so the
-  PR link served the live site and the production database while still looking like the
-  PR — silently, until the PR's next deployment ran `alias-set` again. `alias-set`
-  therefore attaches the host with `gitBranch` = the deployment's branch, and re-binds an
-  already-attached host with `PATCH /v9/projects/{id}/domains/{host}` when its binding
-  differs (hosts attached before the fix are re-bound on their PR's next deployment).
 - **An attached domain falls back to production on its own, so cleanup must remove the
   domain too.** A domain attached to a project with no git-branch binding is served by the
   latest **production** deployment whenever nothing else claims it. Deleting only the alias

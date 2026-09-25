@@ -16,7 +16,7 @@ Node ≥ 24. Nincs lint és nincs build lépés.
 
 ```bash
 npm ci
-npm test            # vitest run — 12 fájl, 157 teszt, ~1 s (mérve 2026-09-25)
+npm test            # vitest run — 12 fájl, 151 teszt, ~1 s (mérve 2026-09-23)
 npm run typecheck
 npm run gg-ci -- <parancs> …     # preview CLI: ensure | destroy | refresh-ttl |
                                  # reset-shared | alias-set | alias-remove
@@ -88,10 +88,6 @@ A repó térképe:
   host-portot** (IT-924, közös Docker-daemon): `ports: - 5432` +
   `localhost:${{ job.services.<név>.ports['5432'] }}` — ezt a policy NEM ellenőrzi,
   hívói hash jóváhagyásakor nézd meg.
-- **A PR-hoszt a PR git-ágához kötve kerül a projektre** (IT-1046): a `gitBranch` nélküli
-  projekt-domain production-domain, a Vercel minden prod deployra ráteszi — így a PR-link
-  a merge után az éles kódot és az éles DB-t szolgálta ki. Az `alias-set` az ágat a
-  deploymentből olvassa, a production és az ág nélküli deploymentet elutasítja.
 - **A `preview.yml` `stale`-döntései** (részletek a README „Preview domain" részében):
   a deploy UTÁN nyíló PR-t a PR-feloldás ≤2 percig várja a GitHub
   `commits/{sha}/pulls`-ból (IT-983; auto-újratrigger szándékosan nincs, IT-985 —

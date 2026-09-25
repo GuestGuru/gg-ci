@@ -87,73 +87,32 @@ describe('VercelClient', () => {
 		expect(JSON.parse(init.body)).toEqual({ deploymentId: 'dpl_1', name: 'my-project' })
 	})
 
-	it('a domaint a git-ághoz kötve veszi fel a projektre (IT-1046)', async () => {
+	it('hozzáadja a domaint a projekthez', async () => {
 		fetchMock.mockResolvedValueOnce(
 			jsonResponse({ name: 'pr-12.preview.example.com', apexName: 'example.com', verified: true }),
 		)
 
-		const result = await client().addProjectDomain('pr-12.preview.example.com', 'feat/pr-12')
+		const result = await client().addProjectDomain('pr-12.preview.example.com')
 
 		const [url, init] = mockCallArgs(fetchMock)
 		expect(url).toBe('https://api.vercel.com/v10/projects/prj_1/domains?teamId=team_1')
 		expect(init.method).toBe('POST')
-		// A gitBranch nélküli domain production-domain: a következő prod deploy elviszi.
-		expect(JSON.parse(init.body)).toEqual({ name: 'pr-12.preview.example.com', gitBranch: 'feat/pr-12' })
-		expect(result).toEqual({ alreadyPresent: false, verified: true, rebound: false })
+		expect(JSON.parse(init.body)).toEqual({ name: 'pr-12.preview.example.com' })
+		expect(result).toEqual({ alreadyPresent: false, verified: true })
 	})
 
-	it('idempotens: a projekten már meglévő, ugyanahhoz az ághoz kötött domain (400) nem hiba', async () => {
+	it('idempotens: a projekten már meglévő domain (400) nem hiba', async () => {
 		fetchMock
 			.mockResolvedValueOnce(
 				jsonResponse({ error: { code: 'domain_already_in_use' } }, 400),
 			)
-			// A megerősítő lekérdezés: a domain tényleg EZEN a projekten van, a jó ágon.
-			.mockResolvedValueOnce(
-				jsonResponse({ name: 'pr-12.preview.example.com', verified: true, gitBranch: 'feat/pr-12' }),
-			)
+			// A megerősítő lekérdezés: a domain tényleg EZEN a projekten van.
+			.mockResolvedValueOnce(jsonResponse({ name: 'pr-12.preview.example.com', verified: true }))
 
-		expect(await client().addProjectDomain('pr-12.preview.example.com', 'feat/pr-12')).toEqual({
+		expect(await client().addProjectDomain('pr-12.preview.example.com')).toEqual({
 			alreadyPresent: true,
 			verified: true,
-			rebound: false,
 		})
-		expect(fetchMock).toHaveBeenCalledTimes(2)
-	})
-
-	it('a meglévő, ág nélküli domaint PATCH-csel az ághoz köti (IT-1046)', async () => {
-		fetchMock
-			.mockResolvedValueOnce(jsonResponse({ error: { code: 'domain_already_in_use' } }, 400))
-			.mockResolvedValueOnce(jsonResponse({ name: 'pr-12.preview.example.com', verified: true, gitBranch: null }))
-			.mockResolvedValueOnce(jsonResponse({ name: 'pr-12.preview.example.com', gitBranch: 'feat/pr-12' }))
-
-		expect(await client().addProjectDomain('pr-12.preview.example.com', 'feat/pr-12')).toEqual({
-			alreadyPresent: true,
-			verified: true,
-			rebound: true,
-		})
-		const [url, init] = mockCallArgs(fetchMock, 2)
-		expect(url).toBe(
-			'https://api.vercel.com/v9/projects/prj_1/domains/pr-12.preview.example.com?teamId=team_1',
-		)
-		expect(init.method).toBe('PATCH')
-		expect(JSON.parse(init.body)).toEqual({ gitBranch: 'feat/pr-12' })
-	})
-
-	it('a deployment targetjét és git-ágát olvassa ki', async () => {
-		fetchMock.mockResolvedValueOnce(
-			jsonResponse({ id: 'dpl_1', target: null, meta: { githubCommitRef: 'feat/pr-12', githubPrId: '12' } }),
-		)
-
-		expect(await client().getDeployment('dpl_1')).toEqual({ id: 'dpl_1', target: null, gitBranch: 'feat/pr-12' })
-		const [url, init] = mockCallArgs(fetchMock)
-		expect(url).toBe('https://api.vercel.com/v13/deployments/dpl_1?teamId=team_1')
-		expect(init.method).toBe('GET')
-	})
-
-	it('git-forrás nélküli deploymentnél a git-ág null', async () => {
-		fetchMock.mockResolvedValueOnce(jsonResponse({ id: 'dpl_1', target: 'production', meta: {} }))
-
-		expect(await client().getDeployment('dpl_1')).toEqual({ id: 'dpl_1', target: 'production', gitBranch: null })
 	})
 
 	it('dob, ha a domain MÁS projekthez tartozik (409) — ezt nem szabad elnyelni', async () => {
@@ -162,7 +121,7 @@ describe('VercelClient', () => {
 			// A megerősítő lekérdezés 404: a domain nincs a mi projektünkön.
 			.mockResolvedValueOnce(new Response('not found', { status: 404 }))
 
-		await expect(client().addProjectDomain('pr-12.preview.example.com', 'feat/pr-12')).rejects.toThrow(/409/)
+		await expect(client().addProjectDomain('pr-12.preview.example.com')).rejects.toThrow(/409/)
 	})
 
 	it('leválasztja a domaint a projektről', async () => {
