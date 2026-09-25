@@ -17,7 +17,34 @@ export interface VercelAlias {
 	uid: string
 	alias: string
 	deploymentId?: string | null
+	/** The project of the deployment the alias points at. */
+	projectId?: string | null
+	/**
+	 * Per-alias protection bypasses, keyed by secret (`*` for the protection override).
+	 * An entry with `scope: 'alias-protection-override'` is a Deployment Protection
+	 * Exception: the alias is served without Vercel Authentication (IT-1046).
+	 */
+	protectionBypass?: Record<string, { scope?: string }> | null
 }
+
+/** The fields of a deployment `alias-set` decides on before pointing a preview host at it. */
+export interface VercelDeploymentInfo {
+	id: string
+	projectId: string | null
+	/** `'production'`, or `null` for a preview deployment. */
+	target: string | null
+}
+
+/**
+ * The project's Deployment Protection scopes (`ssoProtection.deploymentType`,
+ * `passwordProtection.deploymentType`); `null` = that protection is off.
+ */
+export interface VercelProjectProtection {
+	sso: string | null
+	password: string | null
+}
+
+export const ALIAS_PROTECTION_OVERRIDE = 'alias-protection-override'
 
 export interface VercelProjectDomain {
 	name: string
@@ -58,6 +85,11 @@ export class VercelClient {
 		private readonly config: VercelConfig,
 		private readonly fetchImpl: typeof fetch = fetch,
 	) {}
+
+	/** The project every call of this client is scoped to. */
+	get projectId(): string {
+		return this.config.vercelProjectId
+	}
 
 	private async request<T>(
 		method: string,
@@ -163,33 +195,6 @@ export class VercelClient {
 	}
 
 	/**
-	 * Attaches `host` to the project, which must happen before it can be aliased —
-	 * a per-PR hostname cannot be added by hand ahead of time.
-	 *
-	 * Idempotency cannot be keyed on the status code here, and getting that wrong
-	 * would be dangerous: a domain already on *this* project fails with **400**,
-	 * while **409** means it is held by *another* Vercel project. Swallowing 409
-	 * would silently alias into someone else's domain. So a failed add is resolved
-	 * by asking whether the domain is on this project after all — if it is, the add
-	 * was a no-op; if it is not, the original error stands.
-	 */
-	async addProjectDomain(host: string): Promise<{ alreadyPresent: boolean; verified: boolean }> {
-		try {
-			const result = await this.request<VercelProjectDomain>(
-				'POST',
-				`/v10/projects/${this.config.vercelProjectId}/domains?${this.team}`,
-				{ name: host },
-			)
-			return { alreadyPresent: false, verified: result?.verified ?? false }
-		} catch (error) {
-			if (!(error instanceof VercelApiError)) throw error
-			const existing = await this.findProjectDomain(host)
-			if (!existing) throw error
-			return { alreadyPresent: true, verified: existing.verified }
-		}
-	}
-
-	/**
 	 * Detaches `host` from the project. 404 is not an error: the domain is already
 	 * gone, which is the desired end state.
 	 */
@@ -220,6 +225,59 @@ export class VercelClient {
 			[409],
 		)
 		return { alreadyAssigned: result === undefined }
+	}
+
+	/** Project and target of a deployment — what `alias-set` checks before aliasing to it. */
+	async getDeployment(deploymentId: string): Promise<VercelDeploymentInfo> {
+		const result = await this.request<{ id?: string; projectId?: string | null; target?: string | null }>(
+			'GET',
+			`/v13/deployments/${deploymentId}?${this.team}`,
+		)
+		return {
+			id: result?.id ?? deploymentId,
+			projectId: result?.projectId ?? null,
+			target: result?.target ?? null,
+		}
+	}
+
+	/** The project's Deployment Protection scopes. */
+	async getProjectProtection(): Promise<VercelProjectProtection> {
+		const result = await this.request<{
+			ssoProtection?: { deploymentType?: string } | null
+			passwordProtection?: { deploymentType?: string } | null
+		}>('GET', `/v9/projects/${this.config.vercelProjectId}?${this.team}`)
+		return {
+			sso: result?.ssoProtection?.deploymentType ?? null,
+			password: result?.passwordProtection?.deploymentType ?? null,
+		}
+	}
+
+	/**
+	 * One alias by hostname, team-wide (not only this project's), or null. Team-wide
+	 * on purpose: `alias-set` must see a host that another project holds.
+	 */
+	async getAlias(host: string): Promise<VercelAlias | null> {
+		const result = await this.request<VercelAlias>('GET', `/v4/aliases/${host}?${this.team}`, undefined, [404])
+		return result ?? null
+	}
+
+	/**
+	 * Makes the alias a Deployment Protection Exception: served without Vercel
+	 * Authentication, while the deployment's own `*.vercel.app` URLs stay protected.
+	 * The exception belongs to the alias, so it survives moving the alias to a newer
+	 * deployment, and goes away with the alias. An existing exception answers **400
+	 * `exception_already_exists`** — the desired end state, returned as `false`.
+	 */
+	async createAliasProtectionOverride(aliasUid: string): Promise<boolean> {
+		try {
+			await this.request('PATCH', `/aliases/${aliasUid}/protection-bypass?${this.team}`, {
+				override: { scope: ALIAS_PROTECTION_OVERRIDE, action: 'create' },
+			})
+			return true
+		} catch (error) {
+			if (error instanceof VercelApiError && error.code === 'exception_already_exists') return false
+			throw error
+		}
 	}
 
 	/** Every alias of this project, following the timestamp-cursor pagination. */
