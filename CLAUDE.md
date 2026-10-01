@@ -88,6 +88,11 @@ A repó térképe:
   host-portot** (IT-924, közös Docker-daemon): `ports: - 5432` +
   `localhost:${{ job.services.<név>.ports['5432'] }}` — ezt a policy NEM ellenőrzi,
   hívói hash jóváhagyásakor nézd meg.
+- **A hívói Playwright-smoke best-effort `playwright install-deps` lépésén
+  `timeout-minutes: 2` + `continue-on-error: true`** (IT-1253): keret nélkül egy lassú
+  Ubuntu-tükör a job-keretet eszi meg zöld tesztek mellett (BPDBv2#149, mérve
+  2026-10-01). Mind a 10 smoke-fájlban bent van; a policy NEM ellenőrzi, hívói hash
+  jóváhagyásakor nézd meg (a központosítás: IT-1256).
 - **A PR-hoszt sima deployment-alias, SOHA nem projekt-domain** (IT-1046, mérve
   2026-09-25): a kötetlen projekt-domain production-domain (minden prod-deploy elviszi, a
   PR-link az éles kódot és DB-t mutatja); a git-ághoz kötött preview-domain, a Vercel-védelem
