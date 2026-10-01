@@ -110,7 +110,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'2bb8597f83769854087e0fb5ce7526a6329a4fcf1661784ddc9c30695c0c159d',
 		'.github/workflows/preview-alias.yml':
-			'c8a4230805268eb19ed430147f1af3ee0ed32aea13716eeff15053ad83f0dd41',
+			'70941e25a16f72ddb8584a8534f6190d7c05a341884b858310861c21509f4220',
 		'.github/workflows/preview-db.yml':
 			'5dd303b6c3e41570faf47d75b0be9303bf1e68526a46bbe36ebd6166f3ae22b9',
 	},
@@ -118,7 +118,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'c8b1abd956de1be236aa67d37ca3bb1120f95557ed8bebde56f578ab00a9a899',
 		'.github/workflows/preview-alias.yml':
-			'25722752cba7384cc4a3e97576d9a9a266172416a20ca80cb33ad86231da38f8',
+			'69d7911dd2a1906ef7490b1544d67b884fe164d29e49c7f60a5b118451c2ca3a',
 		'.github/workflows/preview-db.yml':
 			'ef72e4279f6f2cfdf4ce7a34ad46900860adc6c76ad217afe7ae8b06aa352ad0',
 	},
@@ -140,9 +140,9 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/gg-sales': {
 		'.github/workflows/ci.yml':
-			'1e245fe8a3fc413c1a2b9d30e840e84e78b4c20ab8be0012869d1895c3657bcb',
+			'7c447c59a3b5dc542447dcf527cac97a85f89e5f6516a4781eccf6873653515e',
 		'.github/workflows/preview-alias.yml':
-			'1f11b5be7b9da998c4772485cec48b1a6310e46a6e7b512a0e6a1364e3bd2e3c',
+			'5b234f81e960f310b68c474ff7e16d9c25e14402fb50890f19c4a2d30ea52216',
 		'.github/workflows/preview-db.yml':
 			'9bab599cdb1b2e41eba83409ae0f22ebd4cccd45d6bc911ee2ecf767d2eb4364',
 	},
@@ -156,7 +156,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'96347f39b29127e97319b2bc85bb81ada2845dda0c20a802a1a1ea738b18c06e',
 		'.github/workflows/preview-alias.yml':
-			'720ae81fd37b799cb1b9e8c7842dab56bf9f91fc835537ea3555932b846842e6',
+			'3019f3ce966c994c2eefdcdd9e466ac3c168c31ea58a7d793b819cf4eb9c044a',
 		'.github/workflows/preview-db.yml':
 			'b1df229d717e3674d984b0c60cf9d9c27000be2ea93c1eb1a5fc18479bb77508',
 	},
@@ -164,7 +164,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'5731363cc42c19a749430336d9ee8ccfb084c285b728efd15e6e99f77aec6d38',
 		'.github/workflows/preview-alias.yml':
-			'76c3ae3a7cb4e78f5d7001df964810cd1d9fd17c92b9853a7b6141bdf222c553',
+			'782948560d2c0c6b83b55aeedff7d7455abf7e3e8914e08ff985988fbb896579',
 		'.github/workflows/preview-db.yml':
 			'9f32bc480118ebda9f696ee7465453de6f7f00410e40b124f37863582533717c',
 	},
@@ -172,7 +172,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'00ebd488d8d0e6616f3af7d396bcad33bcfd9a5224cb9e1d232446ef0321ec79',
 		'.github/workflows/preview-alias.yml':
-			'021fb8cd06f656dd4a4e8a9283012a70ff20824e32ee30491e52d655952fa980',
+			'c4cc4970da784671167e1a0d356d31defbae468eb95bb3788bc620185caaf52a',
 		'.github/workflows/preview-db.yml':
 			'bf585bdebf555f5a4084c2f62024d2e8185665a12c98408898d5351b6c609fd1',
 	},
@@ -182,7 +182,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/delivery-doctor.yml':
 			'46a6f754476399e6015a81bffb32eec7230df34a8f966a4cd805a85a9e5d09ea',
 		'.github/workflows/preview-alias.yml':
-			'4da592d118e2214cc0573befc427cf49d9c400757551ebfb3ab9f7e6b7fb6b0e',
+			'3df3cd2949dd6bdc38e0feff326bedede9510824a235e5326d9562f0a1206e41',
 		'.github/workflows/preview-db.yml':
 			'993326888ae69ac03f42f7493c7446c2206a5ebb150c5198ca8051f9bf31e07f',
 		'.github/workflows/publish-auth.yml':
@@ -194,7 +194,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'752f8d831f64ceff276ec7ec65a3a4bf87a1618ab5f6643aa58f4034b0f1f498',
 		'.github/workflows/preview-alias.yml':
-			'88f265aa6a850bfe4fc0d2c6046c47098c83fd30e55d7e95ae48ceaf7d60551e',
+			'cf6957869cf0d3a7744091a12a1c35ad7cf61af8adce4a20a5d0633ed672bab2',
 		'.github/workflows/preview-db.yml':
 			'd2de948bd8611ad452d397412e533f85e183bdc5dc0ad95488c2dcf6936b53e3',
 	},
@@ -202,7 +202,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'f5a002a77d3369af3bd58b1e13f6980bb6cf5ef0298acedf3bc7dc6ae15cacf9',
 		'.github/workflows/preview-alias.yml':
-			'5595e8264e7d0db1d9c6f317a79a600d5f3d83fa0e5fba58c5d2b4a36b46588d',
+			'69944fc5ffc292c87175ca65d5319da5061630a1b48af2454feac62147d810e4',
 		'.github/workflows/preview-db.yml':
 			'5ce68336d44583d84b9389e7565ad6b68456755dbb451b4e1d686ccdb230ebca',
 	},
