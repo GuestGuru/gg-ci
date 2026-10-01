@@ -1,0 +1,33 @@
+# A GG Playwright-smoke-ok közös telepítő lépése (IT-1256). A hívók `@main`-re
+# hivatkoznak, ugyanúgy, mint a reusable workflow-kra: a telepítés módja így
+# EGY helyen változik, és a változás nem kér hash-láncot a fogyasztó repókban.
+# A logika az `install.sh`-ban van, mert ott tesztelhető
+# (test/playwright-chromium-action.test.ts).
+#
+# ⚠️ Composite lépésen a `timeout-minutes` nem támogatott kulcs, ezért a
+# best-effort apt-lépés időkeretét a szkript adja (GNU `timeout`), és a hívó
+# lépésén NINCS `continue-on-error`: a böngésző-telepítés kötelező marad.
+name: Playwright Chromium
+description: >-
+  Installs Playwright's Chromium (required) and, best-effort and time-limited,
+  its system packages. Used by every GuestGuru Playwright smoke job.
+inputs:
+  working-directory:
+    description: Directory whose Playwright installation runs (the package that depends on @playwright/test).
+    required: false
+    default: .
+  package-manager:
+    description: How to run the local Playwright CLI — npm (npx) or pnpm (pnpm exec).
+    required: false
+    default: npm
+runs:
+  using: composite
+  steps:
+    - name: Install Playwright Chromium
+      shell: bash
+      # A composite run-lépés NEM örökli a hívó job `defaults.run.working-directory`-ját,
+      # ezért kell külön input.
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        PACKAGE_MANAGER: ${{ inputs.package-manager }}
+      run: bash "$GITHUB_ACTION_PATH/install.sh"

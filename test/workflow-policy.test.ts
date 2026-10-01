@@ -11,6 +11,8 @@ import {
 	run,
 	packageJsonDeclaresPackageManager,
 	stalePinDiagnosis,
+	PLAYWRIGHT_ACTION,
+	validatePlaywrightInstall,
 	validateRunnerInvariants,
 	validateWorkflowPolicy,
 	workflowInventoryForRepository,
@@ -104,7 +106,7 @@ describe('workflow policy', () => {
 			'.github/workflows/ci.yml':
 				'00ebd488d8d0e6616f3af7d396bcad33bcfd9a5224cb9e1d232446ef0321ec79',
 			'.github/workflows/preview-alias.yml':
-				'c4cc4970da784671167e1a0d356d31defbae468eb95bb3788bc620185caaf52a',
+				'77f07fa6dfc833c9c94a0e597418b6844dff6466b5b16058b82688b295a5ae64',
 			'.github/workflows/preview-db.yml':
 				'bf585bdebf555f5a4084c2f62024d2e8185665a12c98408898d5351b6c609fd1',
 		})
@@ -489,6 +491,71 @@ jobs:
 		} finally {
 			rmSync(root, { recursive: true, force: true })
 		}
+	})
+})
+
+describe('shared Playwright install (IT-1256)', () => {
+	const job = (runsOn: string, steps: string) => `
+jobs:
+  smoke:
+    runs-on: ${runsOn}
+    steps:
+${steps}
+`
+	const validate = (yaml: string) =>
+		validatePlaywrightInstall({ '.github/workflows/preview-alias.yml': yaml })
+
+	it('accepts the shared action and unrelated playwright commands', () => {
+		expect(
+			validate(
+				job(
+					'[self-hosted, gg-runner]',
+					`      - uses: ${PLAYWRIGHT_ACTION}
+        with:
+          working-directory: web
+          package-manager: pnpm
+      - run: npx playwright test --config playwright.smoke.config.ts
+      - run: pnpm exec playwright --version`,
+				),
+			),
+		).toEqual([])
+	})
+
+	it('rejects a raw browser install, install-deps and --with-deps on any runner', () => {
+		const errors = validate(
+			job(
+				'blacksmith-2vcpu-ubuntu-2404',
+				`      - run: npx playwright install chromium
+      - run: |
+          if ! pnpm exec playwright install-deps chromium; then
+            echo "::warning::best-effort"
+          fi
+      - run: npx playwright  install --with-deps chromium`,
+			),
+		)
+		expect(errors).toHaveLength(3)
+		expect(errors[0]).toMatch(
+			/^\.github\/workflows\/preview-alias\.yml: job smoke step 1 installs Playwright itself — use GuestGuru\/gg-ci\/\.github\/actions\/playwright-chromium@main/,
+		)
+		expect(errors[1]).toContain('step 2')
+		expect(errors[2]).toContain('step 3')
+	})
+
+	it('runs inside validateWorkflowPolicy when the sources are given', () => {
+		const sources = {
+			'.github/workflows/preview-alias.yml': job(
+				'ubuntu-latest',
+				'      - run: npx playwright install chromium',
+			),
+		}
+		const errors = validateWorkflowPolicy(
+			'GuestGuru/gg-sales',
+			validSalesWorkflow,
+			salesInventory,
+			undefined,
+			{ sources, packageManagerDeclared: false },
+		)
+		expect(errors.filter((error) => error.includes('(IT-1256)'))).toHaveLength(1)
 	})
 })
 

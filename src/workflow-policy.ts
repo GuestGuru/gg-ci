@@ -110,7 +110,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'2bb8597f83769854087e0fb5ce7526a6329a4fcf1661784ddc9c30695c0c159d',
 		'.github/workflows/preview-alias.yml':
-			'70941e25a16f72ddb8584a8534f6190d7c05a341884b858310861c21509f4220',
+			'b25b20f74d5e0a07be1eb0d27e9d87abc665c18bae40915d19ea090fc255f219',
 		'.github/workflows/preview-db.yml':
 			'5dd303b6c3e41570faf47d75b0be9303bf1e68526a46bbe36ebd6166f3ae22b9',
 	},
@@ -118,7 +118,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'c8b1abd956de1be236aa67d37ca3bb1120f95557ed8bebde56f578ab00a9a899',
 		'.github/workflows/preview-alias.yml':
-			'69d7911dd2a1906ef7490b1544d67b884fe164d29e49c7f60a5b118451c2ca3a',
+			'73f0409153413b2fcf22d0baeb3852437481bc1f8ee2f8e287be91e6d354ed7b',
 		'.github/workflows/preview-db.yml':
 			'ef72e4279f6f2cfdf4ce7a34ad46900860adc6c76ad217afe7ae8b06aa352ad0',
 	},
@@ -140,9 +140,9 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	},
 	'GuestGuru/gg-sales': {
 		'.github/workflows/ci.yml':
-			'7c447c59a3b5dc542447dcf527cac97a85f89e5f6516a4781eccf6873653515e',
+			'4370ef4fae3c62757d730e37bec21009478614d7fcabcdd1156d8e1a898c8a0a',
 		'.github/workflows/preview-alias.yml':
-			'5b234f81e960f310b68c474ff7e16d9c25e14402fb50890f19c4a2d30ea52216',
+			'3224a6986bd84dc4c8da4b77577d1d383a3bf06c39faeceb09c9c997612eb6ab',
 		'.github/workflows/preview-db.yml':
 			'9bab599cdb1b2e41eba83409ae0f22ebd4cccd45d6bc911ee2ecf767d2eb4364',
 	},
@@ -156,7 +156,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'96347f39b29127e97319b2bc85bb81ada2845dda0c20a802a1a1ea738b18c06e',
 		'.github/workflows/preview-alias.yml':
-			'3019f3ce966c994c2eefdcdd9e466ac3c168c31ea58a7d793b819cf4eb9c044a',
+			'5c0a48d81d70a3df6ec0f0dce0e5c49eacc71e530bf16afaed9e39878ca77180',
 		'.github/workflows/preview-db.yml':
 			'b1df229d717e3674d984b0c60cf9d9c27000be2ea93c1eb1a5fc18479bb77508',
 	},
@@ -164,7 +164,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'5731363cc42c19a749430336d9ee8ccfb084c285b728efd15e6e99f77aec6d38',
 		'.github/workflows/preview-alias.yml':
-			'782948560d2c0c6b83b55aeedff7d7455abf7e3e8914e08ff985988fbb896579',
+			'8d6b1a538aa3641814548ac684e8cd53e6b84c9dcf852fa8351d6c30212d5511',
 		'.github/workflows/preview-db.yml':
 			'9f32bc480118ebda9f696ee7465453de6f7f00410e40b124f37863582533717c',
 	},
@@ -172,7 +172,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'00ebd488d8d0e6616f3af7d396bcad33bcfd9a5224cb9e1d232446ef0321ec79',
 		'.github/workflows/preview-alias.yml':
-			'c4cc4970da784671167e1a0d356d31defbae468eb95bb3788bc620185caaf52a',
+			'77f07fa6dfc833c9c94a0e597418b6844dff6466b5b16058b82688b295a5ae64',
 		'.github/workflows/preview-db.yml':
 			'bf585bdebf555f5a4084c2f62024d2e8185665a12c98408898d5351b6c609fd1',
 	},
@@ -182,7 +182,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/delivery-doctor.yml':
 			'46a6f754476399e6015a81bffb32eec7230df34a8f966a4cd805a85a9e5d09ea',
 		'.github/workflows/preview-alias.yml':
-			'3df3cd2949dd6bdc38e0feff326bedede9510824a235e5326d9562f0a1206e41',
+			'fabb15d38f5263e93d69938bdf264cf8202b75f3c73038aa509f3c1b5dc9c109',
 		'.github/workflows/preview-db.yml':
 			'993326888ae69ac03f42f7493c7446c2206a5ebb150c5198ca8051f9bf31e07f',
 		'.github/workflows/publish-auth.yml':
@@ -194,7 +194,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'752f8d831f64ceff276ec7ec65a3a4bf87a1618ab5f6643aa58f4034b0f1f498',
 		'.github/workflows/preview-alias.yml':
-			'cf6957869cf0d3a7744091a12a1c35ad7cf61af8adce4a20a5d0633ed672bab2',
+			'43bce8c1e15ea3f2fd7f55e23b01a35181ced262fb8a6261468ef8ca125c1543',
 		'.github/workflows/preview-db.yml':
 			'd2de948bd8611ad452d397412e533f85e183bdc5dc0ad95488c2dcf6936b53e3',
 	},
@@ -202,7 +202,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/ci.yml':
 			'f5a002a77d3369af3bd58b1e13f6980bb6cf5ef0298acedf3bc7dc6ae15cacf9',
 		'.github/workflows/preview-alias.yml':
-			'69944fc5ffc292c87175ca65d5319da5061630a1b48af2454feac62147d810e4',
+			'fbb5bef8b3387c82e3de2a5d08fa733cd8f02c70545e843690b236f0d10482a3',
 		'.github/workflows/preview-db.yml':
 			'5ce68336d44583d84b9389e7565ad6b68456755dbb451b4e1d686ccdb230ebca',
 	},
@@ -474,6 +474,51 @@ export function validateRunnerInvariants(
 	return errors
 }
 
+// --- A Playwright-telepítés egy helyen (IT-1256) ----------------------------
+//
+// A böngésző és a best-effort rendszercsomagok telepítése a gg-ci közös
+// actionjében él (`.github/actions/playwright-chromium`), amire a hívók
+// `@main`-nel hivatkoznak. Korábban tíz workflow-fájl hordozta kézzel ugyanazt a
+// két lépést (IT-782, IT-1253), és minden változás tíz hash-t, egy re-pint és
+// kilenc fogyasztói PR-t kért. Egy workflow `run:` lépésében ezért nem lehet
+// `playwright install` / `install-deps`: a nyers lépés az apt-ot keret nélkül
+// futtatná, és a következő központi változás nem érné el. Minden jobra
+// vonatkozik, nem csak a gg-runneresekre (a BPDBv2 és a gg-sales ci Blacksmith-en
+// fut).
+
+export const PLAYWRIGHT_ACTION =
+	'GuestGuru/gg-ci/.github/actions/playwright-chromium@main'
+const RAW_PLAYWRIGHT_INSTALL = /\bplaywright\s+install(?:-deps)?\b/
+
+export function validatePlaywrightInstall(
+	sources: Record<string, string>,
+): string[] {
+	const errors: string[] = []
+	for (const path of Object.keys(sources).sort()) {
+		let workflow: unknown
+		try {
+			workflow = parse(sources[path] ?? '')
+		} catch {
+			// Az érvénytelen YAML-t a validateRunnerInvariants jelenti.
+			continue
+		}
+		const jobs = asRecord(asRecord(workflow)?.jobs) ?? {}
+		for (const jobName of Object.keys(jobs).sort()) {
+			const steps = asRecord(jobs[jobName])?.steps
+			if (!Array.isArray(steps)) continue
+			steps.forEach((rawStep, index) => {
+				const run = asRecord(rawStep)?.run
+				if (typeof run === 'string' && RAW_PLAYWRIGHT_INSTALL.test(run)) {
+					errors.push(
+						`${path}: job ${jobName} step ${index + 1} installs Playwright itself — use ${PLAYWRIGHT_ACTION} instead, which keeps the browser install required and the apt step best-effort under its own time limit, in one place (IT-1256)`,
+					)
+				}
+			})
+		}
+	}
+	return errors
+}
+
 function validateWorkflowInventory(
 	expected: Record<string, string>,
 	actual: Record<string, string>,
@@ -549,7 +594,8 @@ export function validateWorkflowPolicy(
 	actualInventory: Record<string, string>,
 	centralTrust?: CentralTrustEvidence,
 	// Every workflow file's content plus the package.json evidence; when given,
-	// the gg-runner invariants (IT-974) run on all of them. `run` always passes it.
+	// the gg-runner invariants (IT-974) and the shared Playwright install rule
+	// (IT-1256) run on all of them. `run` always passes it.
 	workflowSources?: WorkflowSourcesEvidence,
 ): string[] {
 	const policy = policyForRepository(repository)
@@ -586,6 +632,7 @@ export function validateWorkflowPolicy(
 		...errors,
 		...validateWorkflowInventory(expectedInventory, actualInventory),
 		...(workflowSources ? validateRunnerInvariants(workflowSources) : []),
+		...(workflowSources ? validatePlaywrightInstall(workflowSources.sources) : []),
 		...centralErrors,
 	]
 }
