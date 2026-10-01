@@ -16,7 +16,8 @@ Node ≥ 24. Nincs lint és nincs build lépés.
 
 ```bash
 npm ci
-npm test            # vitest run — 12 fájl, 163 teszt, ~1 s (mérve 2026-09-25)
+npm test            # vitest run — 13 fájl, 174 teszt, ~1 s (mérve 2026-10-01;
+                    # macOS-en 4 kihagyva: GNU timeout kell hozzájuk, a CI futtatja)
 npm run typecheck
 npm run gg-ci -- <parancs> …     # preview CLI: ensure | destroy | refresh-ttl |
                                  # reset-shared | alias-set | alias-remove
@@ -32,6 +33,7 @@ A repó térképe:
 | `.github/workflows/policy-gate.yml` | az org-ruleset injektálja a CÉL-repóba, a pinelt gg-ci SHA-ról — a cél-PR nem tudja lecserélni |
 | `.github/workflows/preview.yml` | a teljes preview-domain folyamat: PR + Vercel deployment feloldás, elavulás-döntés, alias, PR-komment |
 | `.github/workflows/neon-preview.yml` | per-PR Neon branch + branch-scope-os Vercel preview env |
+| `.github/actions/playwright-chromium/` | a Playwright-smoke-ok közös telepítő lépése (IT-1256): böngésző kötelező, apt best-effort, saját kerettel |
 | `src/workflow-policy.ts` | a policy: per-repo `policies`, `approvedWorkflowInventories` (workflow-fájl → SHA-256), gg-runner invariánsok (IT-974), central-trust self-check, pin-diagnózis |
 | `src/quality-gate.ts` | a `needs` kiértékelése (fail-closed) |
 | `src/cli.ts`, `src/commands/`, `src/neon.ts`, `src/vercel.ts` | a preview CLI |
@@ -88,11 +90,16 @@ A repó térképe:
   host-portot** (IT-924, közös Docker-daemon): `ports: - 5432` +
   `localhost:${{ job.services.<név>.ports['5432'] }}` — ezt a policy NEM ellenőrzi,
   hívói hash jóváhagyásakor nézd meg.
-- **A hívói Playwright-smoke best-effort `playwright install-deps` lépésén
-  `timeout-minutes: 2` + `continue-on-error: true`** (IT-1253): keret nélkül egy lassú
-  Ubuntu-tükör a job-keretet eszi meg zöld tesztek mellett (BPDBv2#149, mérve
-  2026-10-01). Mind a 10 smoke-fájlban bent van; a policy NEM ellenőrzi, hívói hash
-  jóváhagyásakor nézd meg (a központosítás: IT-1256).
+- **A Playwright-telepítés a gg-ci közös actionje** (IT-1256):
+  `.github/actions/playwright-chromium` (a logika az `install.sh`-ban, tesztje a
+  `test/playwright-chromium-action.test.ts`), a hívók `@main`-nel hivatkoznak rá. A
+  böngésző kötelező, az `install-deps` best-effort, 120 mp-es kerettel (GNU `timeout`
+  a szkriptben, mert composite lépésen nincs `timeout-minutes`; előzmény IT-782,
+  IT-1253). Az action módosítása **egy sima PR, re-pin nélkül**, és a következő
+  futástól minden hívóra hat. **A policy ellenőrzi**: workflow `run:`-ban nyers
+  `playwright install`/`install-deps` hibát ad. A hívó lépésén a `working-directory`
+  input kell, ha a job `defaults.run`-nal másik mappában fut (BPDBv2, irnok: `web`) —
+  a composite lépés ezt nem örökli.
 - **A PR-hoszt sima deployment-alias, SOHA nem projekt-domain** (IT-1046, mérve
   2026-09-25): a kötetlen projekt-domain production-domain (minden prod-deploy elviszi, a
   PR-link az éles kódot és DB-t mutatja); a git-ághoz kötött preview-domain, a Vercel-védelem

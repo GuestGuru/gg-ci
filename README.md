@@ -157,6 +157,49 @@ The policy gate enforces this too (IT-974): a `pnpm/action-setup` step in a job
 whose `runs-on` names `gg-runner` or `GG_CI_RUNNER` must set exactly that `dest`,
 in every workflow file of the inventory.
 
+### Playwright smoke: one shared install step
+
+Every Playwright smoke job installs its browser through one composite action in this
+repository, referenced at `@main` like the reusable workflows:
+
+```yaml
+- if: steps.changes.outputs.code == 'true'   # the caller's own condition, if any
+  name: Playwright Chromium
+  uses: GuestGuru/gg-ci/.github/actions/playwright-chromium@main
+  with:
+    working-directory: web        # default: .  (the package that depends on @playwright/test)
+    package-manager: pnpm         # default: npm (npx); pnpm runs `pnpm exec`
+```
+
+It runs `.github/actions/playwright-chromium/install.sh`, in two parts:
+
+* **`playwright install chromium` is required.** The browser comes from Playwright's own
+  CDN; without it the smoke measures nothing, so its failure fails the step.
+* **`playwright install-deps chromium` is best-effort, with its own 120 s limit.** It runs
+  `apt-get` against an external Ubuntu mirror. A mirror outage once failed five merge gates
+  in a day with green tests (the packages it could not fetch — `xvfb`, `xfonts-scalable` —
+  are X11 packages headless Chromium does not need), and a ~100 kB/s mirror once spent the
+  whole job budget on this step. A failure or a timeout prints a `::warning::` and the
+  step still succeeds; if Chromium really lacks a library, the tests say so.
+
+The limit lives in the script because `timeout-minutes` is not supported on a composite
+action's steps; GNU `timeout` signals the whole process group, so `sudo apt-get` stops
+too. A composite step does not inherit the caller job's `defaults.run.working-directory`,
+which is why `working-directory` is an input.
+
+**Why an action and not a copied step.** The same two steps used to live in ten caller
+workflow files, so every change to them — a time limit, a cache, another mirror — meant
+ten new hashes in `approvedWorkflowInventories`, a ruleset re-pin and nine caller pull
+requests (IT-1253). A change to `.github/actions/` is not policy-relevant: one pull request
+here, no re-pin, and every caller picks it up on its next run. Test such a change with
+`npm test` — `test/playwright-chromium-action.test.ts` runs the script against stub
+`npx`/`pnpm` commands, including a hanging `install-deps` (the timeout cases need GNU
+`timeout`, so they run on Linux, i.e. in this repository's CI, and are skipped on macOS).
+
+The policy gate enforces the shared step (IT-1256): a `run:` step in any job of any
+inventory workflow that calls `playwright install` or `playwright install-deps` fails
+with an error naming the file, the job, the step and the action to use instead.
+
 ### Releasing a policy change
 
 The organization ruleset must pin this required workflow to an immutable commit `sha`,
