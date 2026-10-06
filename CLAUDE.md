@@ -84,7 +84,7 @@ A repó térképe:
   **A policy ellenőrzi** (IT-974, `validateRunnerInvariants`), a `packageManager`-es
   repókban (tools, gg-tracker) a `package-manager-cache: false` kötelező.
 - **Saját runneren a `pnpm/action-setup` `dest`-je `${{ runner.temp }}/setup-pnpm`**
-  (IT-971): a default `~/setup-pnpm` a két runner-példány közös HOME-ja, és az action
+  (IT-971): a default `~/setup-pnpm` a runner-példányok (2026-10-06 óta négy, IT-1323) közös HOME-ja, és az action
   minden jobban törli — két egyszerre induló job egymás alól törli a pnpm-et. **A
   policy ellenőrzi** (IT-974). A `services:` konténer viszont **nem köthet fix
   host-portot** (IT-924, közös Docker-daemon): `ports: - 5432` +
