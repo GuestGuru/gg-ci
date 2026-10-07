@@ -35,6 +35,11 @@ quality-gate:
     status-context: GG deployment gate
 ```
 
+A gg-inbox (IT-1394) callerében a `status-context` pontos, policy által ellenőrzött
+kifejezés: csak `push` + `refs/heads/main` esetén `GG deployment gate`, egyébként
+üres string. A quality-gate Check Run PR-en is lefut; a production commit status
+PR-ről nem keletkezhet. A többi fogyasztó saját policyja változatlan.
+
 `if: always()` is essential: without it GitHub skips the final job when a dependency
 fails, leaving a required check pending instead of reporting a useful failure.
 Every direct dependency must finish with `success`; `failure`, `cancelled`, `skipped`,
