@@ -1,8 +1,22 @@
 # gg-ci
 
-Cross-app CI infrastructure for GuestGuru. **This repository is public** — it contains
-generic glue code only. Never add infrastructure identifiers, tokens, or app-specific
-default values here.
+Cross-app CI infrastructure for GuestGuru: reusable workflows, a CLI the callers' CI runs,
+and the operations scripts of the self-hosted runner VM. **This repository is public**,
+and it cannot be private: the reusable workflows check themselves out with the caller's
+`GITHUB_TOKEN`, which cannot see a private `gg-ci` (IT-285, measured).
+
+**What may and may not go in** (house rule since 2026-10-09, IT-1496):
+
+* **Never:** secrets or anything that grants access — tokens, API keys, passwords,
+  connection strings, bypass secrets, private keys; customer or personal data; directly
+  exploitable security details.
+* **Fine:** internal paths, VM and profile names, runner counts, repository and domain
+  names, app-specific default values, Vercel/Neon project and team IDs.
+* Workflow inputs instead of hard-coded values are recommended where several callers share
+  the code, not required.
+
+`test/secret-guard.test.ts` (part of `npm test`) scans every tracked file for
+secret-shaped text and fails the build on a hit.
 
 ## Organization quality gate
 
@@ -252,6 +266,40 @@ When the pin already matches `main`, the run says so instead, ruling the stale p
 Rollout order matters: merge `gg-ci`, switch every caller from its temporary test ref
 to `@main`, verify all checks, and only then enable the organization ruleset workflow
 and the required status check.
+
+## Self-hosted runner (gg-runner)
+
+GuestGuru's private repositories run their CI on self-hosted runners: four runner
+instances (`gg-ci-vm` … `gg-ci-vm-4`, systemd units `actions.runner.GuestGuru.*`) in one
+Colima VM, profile `ci`, on the `gg-mb` host. The VM's operations scripts live in
+`runner/`; the copy in the VM is a deployment of this directory, not a source of its own.
+
+| file | installed in the VM as | what it does |
+|---|---|---|
+| `runner/disk-guard.sh` | `~/runner-hooks/disk-guard.sh` | `ACTIONS_RUNNER_HOOK_JOB_COMPLETED` hook of every instance (IT-762, IT-1494). Prunes stale `_work` checkouts on the work disk, and on the 19 GB root disk, below 4 GB free, in steps: `/tmp` leftovers, least-recently-used Playwright browsers, `~/.npm/_cacache`. The root-disk steps are skipped while another job's `Runner.Worker` runs. Never fails the job; reports free space in the job log and events in `~/runner-hooks/disk-guard-events.log`. |
+| `runner/playwright-install.sh` | `/opt/gg-playwright/telepit.sh` | Installs one pinned Playwright module plus its Chromium for the DOM measurements (IT-945); run by hand in the VM (`/opt/gg-playwright/telepit.sh <version>`) when no runner is busy. |
+| `runner/install.sh` | — (runs on the host) | Deploys the two scripts and verifies the result. |
+
+```bash
+runner/install.sh           # deploy what differs, then verify
+runner/install.sh --check   # verify only; exit 1 on any drift
+```
+
+`install.sh` runs on the VM host (`colima ssh -p ci`). It compares each target's SHA-256
+and mode with the repository and rewrites only what differs, through a temporary file in
+the same directory and a `mv`, so a hook starting mid-update never reads a half-written
+file; a second run only measures. It then checks, for every `actions.runner.*` unit, that
+the instance's `.env` points `ACTIONS_RUNNER_HOOK_JOB_COMPLETED` at the deployed hook and
+sets `GG_PLAYWRIGHT` / `GG_PLAYWRIGHT_BROWSERS_PATH` to `/opt/gg-playwright`. It reads only
+those three keys (the `.env` may hold secrets), never edits the `.env`, and never restarts
+a runner: the hook path does not change, and the runner reads the hook file at the end
+of each job, so a deployment takes effect from the next job on.
+
+A change to `runner/` is one ordinary pull request — the directory is not part of the
+workflow inventory, so no re-pin. After the merge, run `runner/install.sh` on the host.
+`npm test` runs `shellcheck` on every script (required in CI, skipped locally when
+`shellcheck` is missing) and exercises `install.sh` against stub `colima` and `systemctl`
+commands (`test/runner-scripts.test.ts`).
 
 ## Neon preview branches
 
