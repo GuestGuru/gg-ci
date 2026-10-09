@@ -120,7 +120,7 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 		'.github/workflows/preview-alias.yml':
 			'1418d6e621b765dddea1bf50ba57fa0617a2d93c5ba12f5c502f23203533291f',
 		'.github/workflows/preview-db.yml':
-			'76d432daf9faf0a0f7da97ab6de6b3031fe44af7f3bf271462039e689d0efc12',
+			'd69c4132bb542d7429816bfd48f6371e661620ef4eff7d573f1c350921347d94',
 	},
 	'GuestGuru/ainita': {
 		'.github/workflows/ci.yml':
