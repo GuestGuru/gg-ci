@@ -1,0 +1,5 @@
+# A runner/ szkriptjei bájtra azonosak a VM-en élő változattal (IT-1496).
+# SC2012 (info, „ls helyett find”): a playwright-install.sh a runner saját
+# tool-cache-ének node-könyvtárait listázza (24.x/arm64/bin) — kötött, szóköz
+# nélküli nevek, a `sort -V` pedig az ls kimenetére épít.
+disable=SC2012

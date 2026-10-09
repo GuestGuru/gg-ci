@@ -1,9 +1,9 @@
 # gg-ci
 
-A GuestGuru közös, alkalmazás-független CI-infrastruktúrája: négy GitHub Actions
-workflow (`quality-gate`, `policy-gate`, `preview`, `neon-preview`) és egy TypeScript
-CLI, amit a fogyasztó repók CI-ja hív. **A repó publikus**, és szándékosan csak
-általános ragasztó-kódot tartalmaz — minden alkalmazás-specifikus érték input.
+A GuestGuru közös CI-infrastruktúrája: négy GitHub Actions workflow
+(`quality-gate`, `policy-gate`, `preview`, `neon-preview`), egy TypeScript CLI, amit a
+fogyasztó repók CI-ja hív, és a saját runner VM-jének üzemeltetési szkriptjei
+(`runner/`). **A repó publikus**: titok nem kerülhet bele (l. lent).
 Nincs deploy: a `main` maga a kiadás (a hívók `@main`-re hivatkoznak), a
 `policy-gate.yml`-t pedig az org-ruleset egy immutable commit-SHA-ra pinneli.
 
@@ -16,8 +16,9 @@ Node ≥ 24. Nincs lint és nincs build lépés.
 
 ```bash
 npm ci
-npm test            # vitest run — 13 fájl, 174 teszt, ~1 s (mérve 2026-10-01;
-                    # macOS-en 4 kihagyva: GNU timeout kell hozzájuk, a CI futtatja)
+npm test            # vitest run — 16 fájl, 187 teszt, ~5 s (mérve 2026-10-09;
+                    # macOS-en 4 kihagyva: GNU timeout kell hozzájuk, a CI futtatja;
+                    # a shellcheck-teszt helyben csak akkor fut, ha van shellcheck)
 npm run typecheck
 npm run gg-ci -- <parancs> …     # preview CLI: ensure | destroy | refresh-ttl |
                                  # reset-shared | alias-set | alias-remove
@@ -38,16 +39,22 @@ A repó térképe:
 | `src/quality-gate.ts` | a `needs` kiértékelése (fail-closed) |
 | `src/cli.ts`, `src/commands/`, `src/neon.ts`, `src/vercel.ts` | a preview CLI |
 | `src/trust-inventory.json` | a központi bizalmi fájlok hash-manifestje |
+| `runner/` | a gg-runner VM (gg-mb, Colima `ci` profil) szkriptjei: `disk-guard.sh` (JOB_COMPLETED hook), `playwright-install.sh` (a VM-ben `/opt/gg-playwright/telepit.sh`), `install.sh` (telepítés + visszamérés, `--check`), IT-1496 |
 
 ## Kemény szabályok és csapdák
 
-- **Ebbe a repóba nem kerül infrastruktúra-azonosító**: Vercel/Neon projekt- vagy
-  team-ID, connection string, domain, token, app-specifikus default érték. Minden
-  ilyen workflow-input. Ellenőrzés: `git grep -nE 'prj_[A-Za-z0-9]{10,}|team_[A-Za-z0-9]{10,}|neondb_owne[r]|guest\.guru'`
-  → üres (a tesztek `prj_1`/`team_1` helyőrzői és a `VERCEL_TEAM_ID` input-nevek
-  nem azonosítók; a régi `prj_|team_` minta ezekre is talált — mérve 2026-09-24).
-  Emiatt nem lehet privát sem: a reusable workflow-k saját magukat checkoutolják a
-  HÍVÓ `GITHUB_TOKEN`-jével, ami privát gg-ci-t nem lát (IT-285, élesben mérve).
+- **A repó publikus, ezért titok nem kerülhet bele** (Tamás, 2026-10-09, IT-1496; a
+  korábbi „semmi infrastruktúra-azonosító” szabályt váltja). **Tilos:** titok és
+  hozzáférést adó adat (token, API-kulcs, jelszó, connection string, bypass-titok,
+  privát kulcs), ügyfél- és személyes adat, közvetlenül kihasználható biztonsági
+  részlet. **Mehet:** belső útvonal, VM- és profilnév, runner-szám, repó- és
+  domainnév, app-specifikus alapérték, Vercel/Neon projekt- és team-ID. A
+  workflow-inputos általánosság ajánlott, ahol több hívó használja, de nem kötelező.
+  Az őr a `test/secret-guard.test.ts`: minden verziókövetett fájlban titok ALAKÚ
+  szöveget keres (connection string jelszóval, privát kulcs, GitHub/Neon/Linear/
+  Slack/LLM/AWS-kulcs), az `npm test` része. Privát nem lehet: a reusable workflow-k
+  saját magukat checkoutolják a HÍVÓ `GITHUB_TOKEN`-jével, ami privát gg-ci-t nem
+  lát (IT-285, élesben mérve).
 - **A fogyasztó repók PR-jai nem módosíthatják a saját `.github/workflows/`
   fájljaikat.** Bármelyik bájt megváltozása `Workflow content is not approved`,
   amíg a hash itt nincs jóváhagyva. A sorrend háromlépcsős, és a 2. lépés kézi:
@@ -90,6 +97,10 @@ A repó térképe:
   host-portot** (IT-924, közös Docker-daemon): `ports: - 5432` +
   `localhost:${{ job.services.<név>.ports['5432'] }}` — ezt a policy NEM ellenőrzi,
   hívói hash jóváhagyásakor nézd meg.
+- **A `runner/` szkriptjei a VM-en élő példány forrása** (IT-1496): módosítás = sima
+  PR (a `runner/` nincs a workflow-leltárban, re-pin nem kell), merge után a gg-mb-n
+  `runner/install.sh` (csak az eltérőt írja, atomikus cserével, a runnereket nem indítja
+  újra), drift-mérés: `runner/install.sh --check`. A VM-en kézzel ne szerkeszd őket.
 - **A Playwright-telepítés a gg-ci közös actionje** (IT-1256):
   `.github/actions/playwright-chromium` (a logika az `install.sh`-ban, tesztje a
   `test/playwright-chromium-action.test.ts`), a hívók `@main`-nel hivatkoznak rá. A
@@ -145,7 +156,7 @@ lépésekben állt össze.
 - **`README.md`** — a fogyasztói referencia: minden workflow-input, teljes caller
   példák, az onboarding lépései, és a Vercel/Neon API-k éles méréssel szerzett
   viselkedése. Ha a hívó oldalról kérdeznek, ide nézz.
-- **Wiki** (itt nincs, mert szervezet-specifikus azonosítókat tartalmaz):
+- **Wiki** (a szervezeti üzemeltetési tudás, a repón kívül):
   `gg_knowledge_get(topic: "gg-delivery")`, al-oldalak `doc: "ci-kapu"` (a kapu három
   rétege, a release-lánc parancsai, a standby-kapcsoló, a runner-üzemeltetés),
   `doc: "meresi-receptek"`, `doc: "repok-allapota"`.
