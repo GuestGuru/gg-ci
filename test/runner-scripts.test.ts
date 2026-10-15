@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 const runnerDir = new URL('../runner/', import.meta.url).pathname
 const installScript = join(runnerDir, 'install.sh')
-const runnerScripts = ['disk-guard.sh', 'playwright-install.sh', 'install.sh']
+const runnerScripts = ['disk-guard.sh', 'disk-guard-volumes.sh', 'playwright-install.sh', 'install.sh']
 
 const hasShellcheck =
 	spawnSync('/bin/sh', ['-c', 'command -v shellcheck'], { encoding: 'utf8' }).stdout.trim() !== ''
@@ -138,12 +138,13 @@ describe('runner/install.sh (IT-1496)', () => {
 		return { status: result.status, out: result.stdout, err: result.stderr }
 	}
 
-	it('installs both scripts byte-identically with mode 755, then reports the runners', () => {
+	it('installs all three scripts byte-identically with mode 755, then reports the runners', () => {
 		const r = run()
 		expect(r.err).toBe('')
 		expect(r.status).toBe(0)
 		for (const [src, dest] of [
 			['disk-guard.sh', hookPath()],
+			['disk-guard-volumes.sh', join(vmHome, 'runner-hooks', 'disk-guard-volumes.sh')],
 			['playwright-install.sh', pwInstaller()],
 		] as const) {
 			expect(readFileSync(dest)).toEqual(readFileSync(join(runnerDir, src)))
@@ -163,7 +164,7 @@ describe('runner/install.sh (IT-1496)', () => {
 			const r = run(args)
 			expect(r.status).toBe(0)
 			expect(r.out).not.toMatch(/^telepítve:/m)
-			expect(r.out.match(/^változatlan: /gm)).toHaveLength(2)
+			expect(r.out.match(/^változatlan: /gm)).toHaveLength(3)
 		}
 		expect(statSync(hookPath()).mtimeMs).toBe(before)
 	})

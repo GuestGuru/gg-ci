@@ -5,9 +5,11 @@
 #
 # Két diszket figyel:
 #   A. a work-diszk (/mnt/lima-colima-ci, IT-762): ha PRUNE_UNDER_GB alatt van a
-#      szabad hely, kidobja azokat a repo-munkakönyvtárakat, amikben KEEP_DAYS
-#      napja SEMMI nem változott (a runner újraklónoz — ezek eldobhatók). A
-#      _tool / _actions cache-t nem bántja, mert azt minden job újra letöltené.
+#      szabad hely, aszinkron kötettakarítást indít (IT-1732). A segéd az összes
+#      Worker kilépését megvárja, és az új job indítását kizárja a törlés alatt.
+#      A segéd képhez, build cache-hez és work-könyvtárakhoz nem nyúl.
+#      Emellett a korábbi lépcső kidobja a KEEP_DAYS napja teljes fájukban
+#      változatlan repo-checkoutokat; a runner saját cache-könyvtárai maradnak.
 #      WARN_UNDER_GB alatt ::warning::.
 #   B. a rendszerdiszk (/, 19 GB, IT-1494): itt laknak a home cache-ei. Ha
 #      ROOT_PRUNE_UNDER_GB alatt van, lépcsőben takarít, a legolcsóbbal kezdve, és
@@ -80,6 +82,17 @@ work_root="${RUNNER_WORKSPACE:-}"
 
 if [[ -d "$work_root" ]] && avail="$(free_gb "$work_root")" && [[ -n "$avail" ]]; then
   if (( avail < PRUNE_UNDER_GB )); then
+    # A segéd minden streamje leválik: a Worker a hook után tényleg kiléphet.
+    # RUNNER_TRACKING_ID nélkül a job process-reapere sem öli meg a segédet.
+    volume_guard="$(dirname "${BASH_SOURCE[0]}")/disk-guard-volumes.sh"
+    if [[ -f "$volume_guard" ]]; then
+      RUNNER_TRACKING_ID="" nohup bash "$volume_guard" "$work_root" </dev/null >/dev/null 2>&1 &
+      echo "Runner disk guard: kötettakarítás ütemezve az összes Worker kilépése után."
+    else
+      log_event "volume_skip reason=helper_missing"
+    fi
+
+    # A korábbi checkout-lépcső az új kötetlépcső mellett megmarad (IT-762).
     echo "::group::Runner disk guard — takarítás (${avail} GB szabad)"
     for d in "$work_root"/*/; do
       d="${d%/}"
