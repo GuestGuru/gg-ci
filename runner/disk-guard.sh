@@ -5,9 +5,9 @@
 #
 # Két diszket figyel:
 #   A. a work-diszk (/mnt/lima-colima-ci, IT-762): ha PRUNE_UNDER_GB alatt van a
-#      szabad hely, kidobja azokat a repo-munkakönyvtárakat, amikben KEEP_DAYS
-#      napja SEMMI nem változott (a runner újraklónoz — ezek eldobhatók). A
-#      _tool / _actions cache-t nem bántja, mert azt minden job újra letöltené.
+#      szabad hely, aszinkron kötettakarítást indít (IT-1732). A segéd az összes
+#      Worker kilépését megvárja, és az új job indítását kizárja a törlés alatt.
+#      Képhez, build cache-hez és work-könyvtárakhoz nem nyúl.
 #      WARN_UNDER_GB alatt ::warning::.
 #   B. a rendszerdiszk (/, 19 GB, IT-1494): itt laknak a home cache-ei. Ha
 #      ROOT_PRUNE_UNDER_GB alatt van, lépcsőben takarít, a legolcsóbbal kezdve, és
@@ -20,10 +20,6 @@
 #        3. a ~/.npm/_cacache (az npm nincs a PATH-on; minden repó újratölti,
 #           ezért utolsóként).
 #      Ha utána is a küszöb alatt marad, ::warning::.
-#
-# ⚠️ A work-diszk frissessége a könyvtár TELJES fájában mérendő, nem a tetején:
-# egy `_work/<repo>` saját mtime-ja csak a közvetlen gyerekei változásakor
-# frissül, a checkout viszont mélyebben ír. Ezért `find … -newermt … -print -quit`.
 #
 # ⚠️ A Playwright-verziók közül NEM a legmagasabb revízió a „friss”: mérve
 # 2026-10-08, mind a négy (1217–1243) élő repó-hivatkozás volt, és a legkisebb
@@ -44,7 +40,6 @@ set -uo pipefail
 
 WARN_UNDER_GB="${DISK_GUARD_WARN_UNDER_GB:-10}"
 PRUNE_UNDER_GB="${DISK_GUARD_PRUNE_UNDER_GB:-15}"
-KEEP_DAYS="${DISK_GUARD_KEEP_DAYS:-14}"
 ROOT_PATH="${DISK_GUARD_ROOT_PATH:-/}"
 ROOT_PRUNE_UNDER_GB="${DISK_GUARD_ROOT_PRUNE_UNDER_GB:-4}"
 ROOT_PW_KEEP="${DISK_GUARD_ROOT_PW_KEEP:-2}"
@@ -80,17 +75,15 @@ work_root="${RUNNER_WORKSPACE:-}"
 
 if [[ -d "$work_root" ]] && avail="$(free_gb "$work_root")" && [[ -n "$avail" ]]; then
   if (( avail < PRUNE_UNDER_GB )); then
-    echo "::group::Runner disk guard — takarítás (${avail} GB szabad)"
-    for d in "$work_root"/*/; do
-      d="${d%/}"
-      [[ -d "$d" ]] || continue
-      case "$(basename "$d")" in _tool|_actions|_temp|_PipelineMapping|_diag) continue ;; esac
-      [[ -n "$(find "$d" -newermt "-${KEEP_DAYS} days" -print -quit 2>/dev/null)" ]] && continue
-      echo "  eldobva (${KEEP_DAYS} napja semmi nem változott benne): $d"
-      rm -rf -- "$d" || true
-    done
-    echo "::endgroup::"
-    avail="$(free_gb "$work_root")" || avail=0
+    # A segéd minden streamje leválik: a Worker a hook után tényleg kiléphet.
+    # RUNNER_TRACKING_ID nélkül a job process-reapere sem öli meg a segédet.
+    volume_guard="$(dirname "${BASH_SOURCE[0]}")/disk-guard-volumes.sh"
+    if [[ -f "$volume_guard" ]]; then
+      RUNNER_TRACKING_ID="" nohup bash "$volume_guard" "$work_root" </dev/null >/dev/null 2>&1 &
+      echo "Runner disk guard: kötettakarítás ütemezve az összes Worker kilépése után."
+    else
+      log_event "volume_skip reason=helper_missing"
+    fi
   fi
 
   if (( avail < WARN_UNDER_GB )); then

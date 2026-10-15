@@ -6,6 +6,7 @@
 #   runner/install.sh --check   # csak mér; bármilyen eltérésnél exit 1
 #
 # Mit hová (forrás → cél a VM-ben, mód 755):
+#   runner/disk-guard-volumes.sh → ~/runner-hooks/disk-guard-volumes.sh (aszinkron kötettakarító, IT-1732)
 #   runner/disk-guard.sh         → ~/runner-hooks/disk-guard.sh   (JOB_COMPLETED hook, IT-762, IT-1494)
 #   runner/playwright-install.sh → /opt/gg-playwright/telepit.sh  (kézi böngésző-telepítő, IT-945)
 #
@@ -16,7 +17,7 @@
 # Ami már egyezik (sha256 és mód), azt nem írja újra — kétszer futtatva a második
 # futás csak mér.
 #
-# Visszamérés: a két célfájl sha256-ja a repóéval, és minden runner-példány
+# Visszamérés: a három célfájl sha256-ja a repóéval, és minden runner-példány
 # (systemd `actions.runner.*`) .env-jében az ACTIONS_RUNNER_HOOK_JOB_COMPLETED és a
 # két GG_PLAYWRIGHT* sor. A .env többi sorát nem olvassa ki: titok lehet benne.
 #
@@ -99,6 +100,7 @@ command -v colima >/dev/null || { echo "nincs colima a PATH-on: ezt a szkriptet 
 colima status -p "$profile" >/dev/null 2>&1 || { echo "a(z) '$profile' Colima-profil nem fut" >&2; exit 2; }
 
 drift=0
+# A segéd a hook ELŐTT települ: az új hook csak teljes segédet indíthat.
 # forrás (a repóban) | cél (a VM-ben). A lista a 3-as fd-n jön: a `colima ssh`
 # a stdin-t olvassa, és különben megenné a ciklus többi sorát.
 while IFS='|' read -r src dest <&3; do
@@ -116,6 +118,7 @@ while IFS='|' read -r src dest <&3; do
     echo "telepítve: $dest (előtte: $have; most: $now)"
   fi
 done 3<<EOF
+disk-guard-volumes.sh|$hook_dir/disk-guard-volumes.sh
 disk-guard.sh|$hook_dir/disk-guard.sh
 playwright-install.sh|$pw_dir/telepit.sh
 EOF
