@@ -20,7 +20,7 @@ paused=()
 prune_pid=""
 output_file=""
 log_event() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$event_log" 2>/dev/null || true; }
-# shellcheck disable=SC2329 # EXIT trap hívja
+# shellcheck disable=SC2317,SC2329 # EXIT trap hívja; a TERM-viselkedéspróba igazolja
 resume_listeners() {
   local pid
   if [[ -n "$prune_pid" ]]; then
