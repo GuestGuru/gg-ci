@@ -30,7 +30,7 @@ resume_listeners() {
   [[ -z "$output_file" ]] || rm -f -- "$output_file"
   for pid in "${paused[@]}"; do kill -CONT "$pid" 2>/dev/null || true; done
 }
-trap resume_listeners EXIT
+trap 'resume_listeners' EXIT
 trap 'exit 0' HUP INT TERM
 
 # pgrep: 1 = nincs találat, 2/3 = hiba; hiba sosem jelent üres gépet.

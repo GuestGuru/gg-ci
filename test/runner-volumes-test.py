@@ -137,6 +137,8 @@ class VolumeGuardTest(unittest.TestCase):
         checkout = self.root / 'work' / 'old-repo'
         checkout.mkdir(parents=True)
         (checkout / 'keep').write_text('checkout')
+        for entry in [checkout / 'keep', checkout]:
+            os.utime(entry, (time.time() - 30 * 86400,) * 2)
         self.write('workers', '12345')
         self.stub('df', 'case "$*" in *-BG*) echo 7G;; *) echo 20000M;; esac')
         started = time.monotonic()
