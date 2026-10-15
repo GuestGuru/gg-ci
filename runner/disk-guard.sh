@@ -7,7 +7,9 @@
 #   A. a work-diszk (/mnt/lima-colima-ci, IT-762): ha PRUNE_UNDER_GB alatt van a
 #      szabad hely, aszinkron kötettakarítást indít (IT-1732). A segéd az összes
 #      Worker kilépését megvárja, és az új job indítását kizárja a törlés alatt.
-#      Képhez, build cache-hez és work-könyvtárakhoz nem nyúl.
+#      A segéd képhez, build cache-hez és work-könyvtárakhoz nem nyúl.
+#      Emellett a korábbi lépcső kidobja a KEEP_DAYS napja teljes fájukban
+#      változatlan repo-checkoutokat; a runner saját cache-könyvtárai maradnak.
 #      WARN_UNDER_GB alatt ::warning::.
 #   B. a rendszerdiszk (/, 19 GB, IT-1494): itt laknak a home cache-ei. Ha
 #      ROOT_PRUNE_UNDER_GB alatt van, lépcsőben takarít, a legolcsóbbal kezdve, és
@@ -20,6 +22,10 @@
 #        3. a ~/.npm/_cacache (az npm nincs a PATH-on; minden repó újratölti,
 #           ezért utolsóként).
 #      Ha utána is a küszöb alatt marad, ::warning::.
+#
+# ⚠️ A work-diszk frissessége a könyvtár TELJES fájában mérendő, nem a tetején:
+# egy `_work/<repo>` saját mtime-ja csak a közvetlen gyerekei változásakor
+# frissül, a checkout viszont mélyebben ír. Ezért `find … -newermt … -print -quit`.
 #
 # ⚠️ A Playwright-verziók közül NEM a legmagasabb revízió a „friss”: mérve
 # 2026-10-08, mind a négy (1217–1243) élő repó-hivatkozás volt, és a legkisebb
@@ -40,6 +46,7 @@ set -uo pipefail
 
 WARN_UNDER_GB="${DISK_GUARD_WARN_UNDER_GB:-10}"
 PRUNE_UNDER_GB="${DISK_GUARD_PRUNE_UNDER_GB:-15}"
+KEEP_DAYS="${DISK_GUARD_KEEP_DAYS:-14}"
 ROOT_PATH="${DISK_GUARD_ROOT_PATH:-/}"
 ROOT_PRUNE_UNDER_GB="${DISK_GUARD_ROOT_PRUNE_UNDER_GB:-4}"
 ROOT_PW_KEEP="${DISK_GUARD_ROOT_PW_KEEP:-2}"
@@ -84,6 +91,19 @@ if [[ -d "$work_root" ]] && avail="$(free_gb "$work_root")" && [[ -n "$avail" ]]
     else
       log_event "volume_skip reason=helper_missing"
     fi
+
+    # A korábbi checkout-lépcső az új kötetlépcső mellett megmarad (IT-762).
+    echo "::group::Runner disk guard — takarítás (${avail} GB szabad)"
+    for d in "$work_root"/*/; do
+      d="${d%/}"
+      [[ -d "$d" ]] || continue
+      case "$(basename "$d")" in _tool|_actions|_temp|_PipelineMapping|_diag) continue ;; esac
+      [[ -n "$(find "$d" -newermt "-${KEEP_DAYS} days" -print -quit 2>/dev/null)" ]] && continue
+      echo "  eldobva (${KEEP_DAYS} napja semmi nem változott benne): $d"
+      rm -rf -- "$d" || true
+    done
+    echo "::endgroup::"
+    avail="$(free_gb "$work_root")" || avail=0
   fi
 
   if (( avail < WARN_UNDER_GB )); then

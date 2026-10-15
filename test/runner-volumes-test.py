@@ -132,13 +132,13 @@ class VolumeGuardTest(unittest.TestCase):
         self.run_guard()
         self.assert_no_prune()
 
-    def test_hook_preserves_old_checkout_and_returns_before_worker_exits(self):
+    def test_hook_returns_before_worker_exits(self):
         import time
         checkout = self.root / 'work' / 'old-repo'
         checkout.mkdir(parents=True)
         (checkout / 'keep').write_text('checkout')
         for entry in [checkout / 'keep', checkout]:
-            os.utime(entry, (time.time() - 30 * 86400,) * 2)
+            os.utime(entry, (time.time() - 1 * 86400,) * 2)
         self.write('workers', '12345')
         self.stub('df', 'case "$*" in *-BG*) echo 7G;; *) echo 20000M;; esac')
         started = time.monotonic()
@@ -150,6 +150,44 @@ class VolumeGuardTest(unittest.TestCase):
         self.assertIn('kötettakarítás ütemezve', r.stdout)
         self.assertTrue((checkout / 'keep').exists())
         self.assert_no_prune()
+
+    def run_checkout_hook(self, **env):
+        self.stub('df', 'case "$*" in *-BG*) echo 7G;; *) echo 20000M;; esac')
+        # A kötetsegéd azonnal kihagy; éles folyamatot vagy Docker-t nem érintünk.
+        self.write('workers', '12345')
+        r = subprocess.run(['bash', '-e', str(SCRIPT.with_name('disk-guard.sh'))],
+                           env=dict(self.env, RUNNER_WORKSPACE=str(self.root / 'work/current'), **env),
+                           capture_output=True, text=True, timeout=3)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn('kötettakarítás ütemezve', r.stdout)
+        return r.stdout
+
+    def old_checkout(self, name):
+        import time
+        checkout = self.root / 'work' / name
+        (checkout / 'nested').mkdir(parents=True)
+        (checkout / 'nested/file').write_text('checkout')
+        for entry in [checkout / 'nested/file', checkout / 'nested', checkout]:
+            os.utime(entry, (time.time() - 30 * 86400,) * 2)
+        return checkout
+
+    def test_hook_prunes_old_checkouts_but_keeps_nested_recent_files_and_runner_caches(self):
+        old = self.old_checkout('old-repo')
+        recent = self.old_checkout('recent-repo')
+        os.utime(recent / 'nested/file', None)
+        protected = [self.old_checkout(name) for name in
+                     ['_tool', '_actions', '_temp', '_PipelineMapping', '_diag']]
+        self.run_checkout_hook()
+        self.assertFalse(old.exists())
+        self.assertTrue((recent / 'nested/file').exists())
+        for checkout in protected:
+            self.assertTrue((checkout / 'nested/file').exists(), checkout)
+        self.assert_no_prune()
+
+    def test_hook_honors_checkout_keep_days_override(self):
+        old = self.old_checkout('old-repo')
+        self.run_checkout_hook(DISK_GUARD_KEEP_DAYS='45')
+        self.assertTrue((old / 'nested/file').exists())
 
     def test_signal_resumes_listener(self):
         self.stub('docker', 'touch "$STATE/pruning"; sleep 120')
