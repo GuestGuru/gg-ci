@@ -21,6 +21,14 @@ const centralGate =
 	'GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main'
 
 const policies: Record<string, WorkflowPolicy> = {
+	// Marketingoldal: könnyű CI, production status csak main pushon (IT-1552).
+	'GuestGuru/guestguru2026': {
+		workflowPath: '.github/workflows/ci.yml',
+		requiredNeeds: ['ci'],
+		uses: centralGate,
+		statusContext:
+			"${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'GG deployment gate' || '' }}",
+	},
 	// A gg-inbox production statust kizárólag a main push publikálhat (IT-1394).
 	'GuestGuru/gg-inbox': {
 		workflowPath: '.github/workflows/ci.yml',
@@ -114,6 +122,12 @@ const policies: Record<string, WorkflowPolicy> = {
 }
 
 const approvedWorkflowInventories: Record<string, Record<string, string>> = {
+	'GuestGuru/guestguru2026': {
+		'.github/workflows/ci.yml':
+			'fcc3e54887c413de06153f42528fbd52b4ac3d233d5c3cd7d0597247937f4e7f',
+		'.github/workflows/preview-db.yml':
+			'3a97ea9ec6d87d11eac4b577f5069a0a42a08b7acaa0e6c650792375dc2100db',
+	},
 	'GuestGuru/gg-inbox': {
 		'.github/workflows/ci.yml':
 			'50dc4d16f056ad02ad806eb2a9d99e659ea1d3c890f22c56fb40622bb436adb3',

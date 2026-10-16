@@ -44,6 +44,42 @@ const salesInventory =
 	workflowInventoryForRepository('GuestGuru/gg-sales') ?? {}
 
 describe('workflow policy', () => {
+	// IT-1552: a marketingoldal kapuja is a valódi ci jobot kéri számon.
+	it('enforces the marketing site gate and publishes production status only on main push', () => {
+		const repository = 'GuestGuru/guestguru2026'
+		const statusContext = "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'GG deployment gate' || '' }}"
+		const workflow = validSalesWorkflow.replace('status-context: GG deployment gate', `status-context: ${statusContext}`)
+		const inventory = workflowInventoryForRepository(repository) ?? {}
+		expect(policyForRepository(repository)).toEqual({
+			workflowPath: '.github/workflows/ci.yml',
+			requiredNeeds: ['ci'],
+			uses: 'GuestGuru/gg-ci/.github/workflows/quality-gate.yml@main',
+			statusContext,
+		})
+		expect(Object.keys(inventory).sort()).toEqual([
+			'.github/workflows/ci.yml',
+			'.github/workflows/preview-db.yml',
+		])
+		expect(validateWorkflowPolicy(repository, workflow, inventory)).toEqual([])
+		expect(validateWorkflowPolicy(repository, workflow.replace('needs: [ci]', 'needs: []'), inventory))
+			.toContain('quality-gate.needs must be exactly [ci]')
+		expect(validateWorkflowPolicy(repository, validSalesWorkflow, inventory))
+			.toContain(`quality-gate.with.status-context must be exactly ${statusContext}`)
+	})
+
+	it('rejects unapproved or extra marketing site workflows', () => {
+		const repository = 'GuestGuru/guestguru2026'
+		const statusContext = "${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'GG deployment gate' || '' }}"
+		const workflow = validSalesWorkflow.replace('status-context: GG deployment gate', `status-context: ${statusContext}`)
+		const inventory = workflowInventoryForRepository(repository) ?? {}
+		for (const path of ['.github/workflows/ci.yml', '.github/workflows/preview-db.yml']) {
+			expect(validateWorkflowPolicy(repository, workflow, { ...inventory, [path]: hashWorkflow('changed') }))
+				.toContain(`Workflow content is not approved: ${path}`)
+		}
+		expect(validateWorkflowPolicy(repository, workflow, { ...inventory, '.github/workflows/extra.yml': hashWorkflow('extra') }))
+			.toContain('Unexpected workflow file: .github/workflows/extra.yml')
+	})
+
 	it('maps every protected repository to its canonical workflow and jobs', () => {
 		expect(policyForRepository('GuestGuru/gg-sales')).toEqual({
 			workflowPath: '.github/workflows/ci.yml',
