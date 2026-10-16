@@ -922,3 +922,16 @@ write` the caller example already grants for the comment covers it.
   client follows the cursor instead of reading only the first page.
 - `DELETE /v2/aliases/{id}` returns 404 for an unknown alias, which the CLI treats as the
   desired end state.
+
+## guestguru2026 onboarding (IT-1552)
+
+A marketingoldal policy-ja a `ci` jobot kéri számon, és csak main pushon engedi a
+`GG deployment gate` production statust. A teljes workflow-inventory a `ci.yml`
+és a változatlan, kapcsoló mögötti `preview-db.yml` fájlt tartalmazza.
+
+A [weboldal runbookja](https://github.com/GuestGuru/guestguru2026/blob/codex/it-1552-delivery/docs/delivery-gates.md)
+adja a koordinátor lépéseit: review és runner-hozzáférés → gg-ci merge → ruleset
+re-pin → include-lista → friss web-PR checkek → web merge → repo-secretek →
+preview-DB kapcsoló és valódi izolációs próba. A policy és az inventory megléte
+még nem jelent aktív ruleset-védelmet vagy működő PR-adatbázist. A két előkészítő
+PR önmagában nem változtat org-beállítást vagy secretet.
