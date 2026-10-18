@@ -26,6 +26,10 @@ npm run quality-gate -- '<needs-json>'
 npm run workflow-policy -- <cél-repo-gyökér>
 ```
 
+- **Tesztek (GG-szabály):** tesztírás előtt olvasd el: wiki [`tudas/gg-delivery/teszteles`](https://wiki.guest.guru/tudas/gg-delivery/teszteles) — kockázat szerint; vizuális, felirat- és forrásszöveg-teszt nem kerül a kapuba; PR-lánc ≤ 5 perc. A gg-ci kivétel a „konfig/workflow-szövegre nem írunk unit-tesztet” alól: itt a workflow maga a termék.
+  Szűk sor (PR-kapu): `npm run typecheck && npm test` (ci.yml, ~30 mp).
+  Bő sor: nincs; ma minden teszt a kapuban fut.
+
 A repó térképe:
 
 | hely | mit csinál |
