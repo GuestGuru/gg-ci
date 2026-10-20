@@ -50,6 +50,17 @@ hiányzó smoke gate-nél előbb a runner-sort mérd, jobs API `started_at`). A
 `PREVIEW_DB_ISOLATED` nélkül épült deploy `stale` (IT-913). Lezárt PR-re az
 `Attach alias` nem ír (IT-975, a `pulls/{n}` `.state` az írás előtt).
 
+## A CLAUDE.md „Jelen állapot” fejezete 2026-10-20-án (a `main`-en, IT-1808)
+
+Az org-ruleset („GG default branch delivery gate”) **15 repót** fed le (`gg-sales`,
+`gg-design`, `BPDBv2`, `gg-agents`, `tools`, `irnok`, `gg-ci`, `gg-tracker`, `gg-mcp`,
+`gg-share`, `gg-ops`, `ainita`, `gg-brain`, `gg-inbox`, `guestguru2026`), kötelező
+checkje a `quality-gate / verify`; a `GG smoke gate` commit statust egy második ruleset
+követeli meg 12 repón. A privát repók CI-ja saját runneren fut, a publikus gg-ci sajátja a
+felhőben (2026-09-23-án kivétel: a `gg-sales` `ci` és a `BPDBv2` Blacksmith-en). A
+`GG_CI_STANDBY` nincs beállítva. A bő tesztsorokat a `scheduled-dispatch/` indítja (IT-1808).
+A szerkezet története az agent-memóriában van.
+
 ## A CLAUDE.md „Jelen állapot” fejezete 2026-09-23-án
 
 Az org-ruleset (a „default branch delivery gate") **12 repót** fed le (`gg-sales`,

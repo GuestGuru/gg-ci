@@ -7,8 +7,7 @@ fogyasztó repók CI-ja hív, és a saját runner VM-jének üzemeltetési szkri
 Nincs deploy: a `main` maga a kiadás (a hívók `@main`-re hivatkoznak), a
 `policy-gate.yml`-t pedig az org-ruleset egy immutable commit-SHA-ra pinneli.
 
-A hívók teljes referenciája (inputok, példa-workflow-k, Vercel/Neon API-tanulságok)
-a **`README.md`-ben** van — ez a fájl nem duplikálja, csak a munkamódot rögzíti.
+A hívók teljes referenciája a **`README.md`** (l. lent); ez a fájl a munkamódot rögzíti.
 
 ## Futtatás, teszt
 
@@ -16,8 +15,7 @@ Node ≥ 24. Nincs lint és nincs build lépés.
 
 ```bash
 npm ci
-npm test            # vitest run (macOS-en pár teszt kimarad: GNU timeout és
-                    # shellcheck kell hozzájuk, a CI futtatja)
+npm test            # vitest; GNU timeout/shellcheck nélkül pár teszt kimarad (CI futtatja)
 npm run typecheck
 npm run gg-ci -- <parancs> …     # preview CLI: ensure | destroy | refresh-ttl |
                                  # reset-shared | alias-set | alias-remove
@@ -43,6 +41,7 @@ A repó térképe:
 | `src/cli.ts`, `src/commands/`, `src/neon.ts`, `src/vercel.ts` | a preview CLI |
 | `src/trust-inventory.json` | a központi bizalmi fájlok hash-manifestje |
 | `runner/` | a gg-runner VM (gg-mb, Colima `ci` profil) szkriptjei: `disk-guard.sh` (JOB_COMPLETED hook), `playwright-install.sh` (a VM-ben `/opt/gg-playwright/telepit.sh`), `install.sh` (telepítés + visszamérés, `--check`), IT-1496 |
+| `scheduled-dispatch/`, `.github/actions/wide-suite-failure/` | a bő tesztsorok gg-mb-s indítója és közös bukásjelzője (IT-1808, részletek: README); sima PR, re-pin nem kell |
 
 ## Kemény szabályok és csapdák
 
@@ -111,13 +110,13 @@ A repó térképe:
 - A saját `ci.yml` szándékosan `ubuntu-latest`-en fut, és soha nem fogyaszt secretet,
   és soha nem használ `pull_request_target`-et (publikus repó, fork-PR-ek).
 
-## Jelen állapot (2026-10-20)
+## Jelen állapot (mérve 2026-10-20)
 
-Az org-ruleset (19620909) kötelező `quality-gate / verify` checkje és a `GG smoke gate`
-ruleset (19738275) fedi a fogyasztókat; a bekötést naponta a `tools` delivery-doctor méri.
+Az org-ruleset (19620909) kötelező `quality-gate / verify` checkje 15 repót, a `GG smoke
+gate` ruleset (19738275) 12 repót fed; a bekötést naponta a `tools` delivery-doctor méri.
 A privát repók CI-ja saját runneren (`gg-runner`) fut, kivétel a `gg-sales` `ci` és a
-`BPDBv2` (Blacksmith); a publikus gg-ci-é a felhőben.
-A szerkezet története: `docs/claude-md-reszletek.md`.
+`BPDBv2` (Blacksmith); a gg-ci-é a felhőben. A bő tesztsorokat a `scheduled-dispatch/`
+indítja (IT-1808). Részletek, repólista, történet: `docs/claude-md-reszletek.md`.
 
 ## Hol van a többi tudás
 
@@ -128,9 +127,8 @@ A szerkezet története: `docs/claude-md-reszletek.md`.
   `gg_knowledge_get(topic: "gg-delivery")`, al-oldalak `doc: "ci-kapu"` (a kapu három
   rétege, a release-lánc parancsai, a standby-kapcsoló, a runner-üzemeltetés),
   `doc: "meresi-receptek"`, `doc: "repok-allapota"`.
-- **`docs/superpowers/specs/2026-07-23-it-244-gg-ci-upgrade-design.md`** és a
-  `docs/superpowers/plans/` három terve — az eredeti kapu-tervezés és a mért
-  kiindulóállapot.
+- **`docs/superpowers/`** (spec + három terv, IT-244) — az eredeti kapu-tervezés és a
+  mért kiindulóállapot.
 - **Agent-memória** (`memoria` skill): keresés „gg-ci" — a döntéstörténet, a ruleset- és
   runner-azonosítók, a költség-mérések és a leckék ott élnek (`project: gg-ci`).
   Kulcsszavak: `workflow-policy`, `quality-gate`, `GG smoke gate`, `GG_CI_STANDBY`,

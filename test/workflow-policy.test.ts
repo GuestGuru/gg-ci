@@ -141,6 +141,9 @@ describe('workflow policy', () => {
 		expect(workflowInventoryForRepository('GuestGuru/gg-ops')).toEqual({
 			'.github/workflows/ci.yml':
 				'00ebd488d8d0e6616f3af7d396bcad33bcfd9a5224cb9e1d232446ef0321ec79',
+			// bő sor, csak workflow_dispatch (IT-1808)
+			'.github/workflows/hatchet-smoke.yml':
+				'782139c12913cc63b6b6dfc5cab6f5600a2965e7187a6778e759f0e721e671ee',
 			'.github/workflows/preview-alias.yml':
 				'77f07fa6dfc833c9c94a0e597418b6844dff6466b5b16058b82688b295a5ae64',
 			'.github/workflows/preview-db.yml':
