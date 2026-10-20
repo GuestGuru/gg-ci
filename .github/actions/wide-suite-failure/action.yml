@@ -1,0 +1,29 @@
+# A bő tesztsorok közös bukásjelzője (IT-1808). A hívó workflow `notify-failure`
+# jobja hívja `@main`-nel, ha a default ágon indított futás nem sikeres: nyitott
+# issue-t keres a megadott címmel, és kommentel rá, vagy újat nyit. Így a bukás
+# látszik (wiki tudas/gg-delivery/teszteles, 1. pont), és egy helyen változik.
+# A logika a `notify.sh`-ban van, mert ott tesztelhető
+# (test/wide-suite-failure-action.test.ts). A hívó jobnak `issues: write` kell.
+name: Wide suite failure
+description: >-
+  Opens (or comments on) one GitHub issue per failing wide test suite, assigned
+  to the given user. Used by every GuestGuru scheduled wide test workflow.
+inputs:
+  title:
+    description: Issue title; one open issue per title collects the repeated failures.
+    required: true
+  assignee:
+    description: GitHub login the issue is assigned to.
+    required: false
+    default: kratam
+runs:
+  using: composite
+  steps:
+    - name: Report wide suite failure
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TITLE: ${{ inputs.title }}
+        ASSIGNEE: ${{ inputs.assignee }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: bash "$GITHUB_ACTION_PATH/notify.sh"

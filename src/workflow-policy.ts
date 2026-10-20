@@ -139,6 +139,8 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	'GuestGuru/ainita': {
 		'.github/workflows/ci.yml':
 			'2bb8597f83769854087e0fb5ce7526a6329a4fcf1661784ddc9c30695c0c159d',
+		'.github/workflows/e2e-wide.yml':
+			'3d47ad21ae42b3464e9cb9dea5176496c504d679c6dd2fbd18b45824ca0e6439',
 		'.github/workflows/preview-alias.yml':
 			'b25b20f74d5e0a07be1eb0d27e9d87abc665c18bae40915d19ea090fc255f219',
 		'.github/workflows/preview-db.yml':
@@ -201,6 +203,8 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	'GuestGuru/gg-ops': {
 		'.github/workflows/ci.yml':
 			'00ebd488d8d0e6616f3af7d396bcad33bcfd9a5224cb9e1d232446ef0321ec79',
+		'.github/workflows/hatchet-smoke.yml':
+			'782139c12913cc63b6b6dfc5cab6f5600a2965e7187a6778e759f0e721e671ee',
 		'.github/workflows/preview-alias.yml':
 			'77f07fa6dfc833c9c94a0e597418b6844dff6466b5b16058b82688b295a5ae64',
 		'.github/workflows/preview-db.yml':
@@ -235,10 +239,14 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 			'fbb5bef8b3387c82e3de2a5d08fa733cd8f02c70545e843690b236f0d10482a3',
 		'.github/workflows/preview-db.yml':
 			'a7366e082e42618735240fcdadf521faa23ef6705e2f90beba61998d43f58292',
+		'.github/workflows/wide-tests.yml':
+			'e16cda9f96a125e0c2d89f086af662ff94cd83e6be046277c8c80fee95a9be61',
 	},
 	'GuestGuru/gg-brain': {
 		'.github/workflows/ci.yml':
 			'b8a148a219efd6c21ae51923903608f9cc39477f34ca9837fc53843fc8e8d82a',
+		'.github/workflows/integration-tests.yml':
+			'd8315b76f34e1fff60303b9404a4dc17aceed0cbdb3946a4f527228d9f0b726a',
 		'.github/workflows/preview-alias.yml':
 			'20c2d755a9a1d5d0203a774c8bdc3ee19116ce9b2db3d17d4a4d4646a722ef36',
 		'.github/workflows/preview-db.yml':

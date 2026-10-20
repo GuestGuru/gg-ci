@@ -44,6 +44,7 @@ A repó térképe:
 | `src/cli.ts`, `src/commands/`, `src/neon.ts`, `src/vercel.ts` | a preview CLI |
 | `src/trust-inventory.json` | a központi bizalmi fájlok hash-manifestje |
 | `runner/` | a gg-runner VM (gg-mb, Colima `ci` profil) szkriptjei: `disk-guard.sh` (JOB_COMPLETED hook), `playwright-install.sh` (a VM-ben `/opt/gg-playwright/telepit.sh`), `install.sh` (telepítés + visszamérés, `--check`), IT-1496 |
+| `scheduled-dispatch/`, `.github/actions/wide-suite-failure/` | a bő tesztsorok gg-mb-s indítója és közös bukásjelzője (IT-1808, részletek: README); sima PR, re-pin nem kell |
 
 ## Kemény szabályok és csapdák
 
@@ -138,22 +139,16 @@ A repó térképe:
 - A saját `ci.yml` szándékosan `ubuntu-latest`-en fut, és soha nem fogyaszt secretet,
   és soha nem használ `pull_request_target`-et (publikus repó, fork-PR-ek).
 
-## Jelen állapot (2026-09-23)
+## Jelen állapot (mérve 2026-10-20)
 
-Az org-ruleset (a „default branch delivery gate") **12 repót** fed le (`gg-sales`,
+Az org-ruleset („GG default branch delivery gate”) **15 repót** fed le (`gg-sales`,
 `gg-design`, `BPDBv2`, `gg-agents`, `tools`, `irnok`, `gg-ci`, `gg-tracker`, `gg-mcp`,
-`gg-share`, `gg-ops`, `ainita`), kötelező checkje a `quality-gate / verify`; egy
-második ruleset a `GG smoke gate` commit statust követeli meg 10 repón (a `gg-ci` és a
-`gg-mcp` nélkül). A privát repók CI-ja saját (self-hosted) runneren fut, a publikus
-gg-ci sajátja a felhőben — két kivétel (mérve 2026-09-23): a `gg-sales` `ci` jobja
-`blacksmith-8vcpu-ubuntu-2404`-en, a `BPDBv2` mindhárom workflow-ja
-`blacksmith-2vcpu-ubuntu-2404`-en. A takarék-kapcsoló (`GG_CI_STANDBY`) nincs
-beállítva. A `preview-alias.yml` 2026-09-10 óta nincs (IT-761). A szerkezet
-2026-07-18 (preview-DB CLI) → 07-23 (quality gate, IT-244) → 07-25 (preview.yml,
-policy-leltár) → 09-10 (saját runner, IT-570) → 09-11/14 (stale-javítások,
-IT-780/IT-810) → 09-23 (gg-runner invariánsok a policyban, IT-974; preview-db,
-késői PR, lezárt PR — IT-913/983/975; mind a 9 per-PR DB-s hívó `preview-db: true`)
-lépésekben állt össze.
+`gg-share`, `gg-ops`, `ainita`, `gg-brain`, `gg-inbox`, `guestguru2026`), kötelező
+checkje a `quality-gate / verify`; a `GG smoke gate` commit statust egy második ruleset
+követeli meg 12 repón. A privát repók CI-ja saját runneren fut, a publikus gg-ci sajátja a
+felhőben (2026-09-23-án kivétel: a `gg-sales` `ci` és a `BPDBv2` Blacksmith-en). A
+`GG_CI_STANDBY` nincs beállítva. A bő tesztsorokat a `scheduled-dispatch/` indítja (IT-1808).
+A szerkezet története az agent-memóriában van.
 
 ## Hol van a többi tudás
 

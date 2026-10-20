@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- A bő tesztsorok ütemezett indítója a gg-mb-n (IT-1808). Sablon: az install.sh tölti ki
+     (__HOME__, __INSTALL_DIR__, __LOG_DIR__). Titok NINCS benne: a gh a saját
+     bejelentkezését használja. Időpont: a launchd helyi időt ismer, ezért óránként, :30-kor
+     hívja a szkriptet `scheduled` módban, és az csak 01 UTC-kor fut (01:30 UTC, a régi cron
+     ideje, nyáron és télen is); a hétfői futás a weekly sorokat is indítja. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>hu.guestguru.gg-ci-scheduled-dispatch</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/bash</string>
+		<string>__INSTALL_DIR__/dispatch.sh</string>
+		<string>scheduled</string>
+	</array>
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Minute</key>
+		<integer>30</integer>
+	</dict>
+	<key>RunAtLoad</key>
+	<false/>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>__HOME__</string>
+		<key>LANG</key>
+		<string>en_US.UTF-8</string>
+		<key>PATH</key>
+		<string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+	</dict>
+	<key>WorkingDirectory</key>
+	<string>__HOME__</string>
+	<key>StandardOutPath</key>
+	<string>__LOG_DIR__/dispatch.log</string>
+	<key>StandardErrorPath</key>
+	<string>__LOG_DIR__/dispatch.log</string>
+	<key>ProcessType</key>
+	<string>Background</string>
+</dict>
+</plist>
