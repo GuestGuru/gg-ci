@@ -44,7 +44,7 @@ describe('scheduled-dispatch: schedule.tsv', () => {
 // A hamis gh: a `workflow run` a futás URL-jét írja ki (mint a valódi, nem terminálon),
 // az azonosító 1000 + az indítás sorszáma; a FAIL_REPO-ra hibázik, a NOURL_REPO-ra URL nélkül
 // sikeres. A `run watch` a WATCH_FAIL azonosítóra 1-gyel lép ki, WATCH_SLEEP mellett
-// lóg. Minden hívás a GH_CALLS fájlba íródik.
+// lóg, WATCH_FLAKY mellett az első hívása hibázik; a `run view` a VIEW_STATE-et adja. Minden hívás a GH_CALLS fájlba íródik.
 const ghStub = `#!/bin/bash
 echo "$*" >> "$GH_CALLS"
 case "$1 $2" in
@@ -55,8 +55,10 @@ case "$1 $2" in
 	"run watch")
 		[[ -n "\${WATCH_SLEEP:-}" ]] && exec sleep "$WATCH_SLEEP"
 		[[ "$3" == "\${WATCH_FAIL:-}" ]] && exit 1
+		# az első watch átmeneti hibával lép ki (mint egy TLS handshake timeout)
+		[[ -n "\${WATCH_FLAKY:-}" && "$(grep -c "^run watch" "$GH_CALLS")" == 1 ]] && exit 1
 		exit 0 ;;
-	"run view") echo "failure" ;;
+	"run view") echo "\${VIEW_STATE:-completed failure}" ;;
 esac
 `
 
@@ -145,6 +147,24 @@ describe('scheduled-dispatch: dispatch.sh', { timeout: 20_000 }, () => {
 		expect(result.status).toBe(1)
 		expect(result.stdout).toContain('HIBA: failure: https://github.com/GuestGuru/a/actions/runs/1001')
 		expect(result.stdout).toContain('kész: success: https://github.com/GuestGuru/b/actions/runs/1002')
+	})
+
+	it('re-watches the same run after a transient watch error while the run is still going', () => {
+		const result = run(['nightly'], { WATCH_FLAKY: '1', VIEW_STATE: 'in_progress ' })
+		expect(result.status, result.stdout + result.stderr).toBe(0)
+		expect(calls('run watch')).toEqual([
+			'run watch 1001 -R GuestGuru/a --exit-status --interval 0',
+			'run watch 1001 -R GuestGuru/a --exit-status --interval 0',
+			'run watch 1002 -R GuestGuru/b --exit-status --interval 0',
+		])
+		expect(result.stdout).toContain('a futás nem ért véget (in_progress ), újra figyelem')
+		expect(result.stdout).toContain('kész: success: https://github.com/GuestGuru/a/actions/runs/1001')
+	})
+
+	it('counts a run that finished successfully as success even if the watch errored', () => {
+		const result = run(['nightly'], { WATCH_FAIL: '1001', VIEW_STATE: 'completed success' })
+		expect(result.status, result.stdout + result.stderr).toBe(0)
+		expect(result.stdout).toContain('kész: success: https://github.com/GuestGuru/a/actions/runs/1001')
 	})
 
 	it('stops waiting after GG_DISPATCH_WAIT_SECONDS and moves on', () => {

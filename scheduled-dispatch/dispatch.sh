@@ -12,8 +12,8 @@
 # `launchctl kickstart`-tal, l. README).
 #
 # A sorok egymás után futnak: minden indítás után a `gh workflow run` által visszaadott
-# futást várja ki (`gh run watch --exit-status`, legfeljebb GG_DISPATCH_WAIT_SECONDS),
-# csak utána jön a következő. Ha egy indítás vagy futás hibázik, a többit akkor is
+# futást várja ki (`gh run watch --exit-status`, legfeljebb GG_DISPATCH_WAIT_SECONDS;
+# átmeneti API-hiba után újrafigyel), csak utána jön a következő. Ha egy indítás vagy futás hibázik, a többit akkor is
 # végigviszi, és a végén 1-gyel lép ki.
 #
 # Hitelesítés: a gg-mb helyi `gh` bejelentkezése (~/.config/gh/hosts.yml).
@@ -87,10 +87,30 @@ for freq in $want; do
     id="${url##*/}"
     log "elindítva: $full $workflow@$ref ($freq): $url"
 
-    # Kivárás időkerettel: a perl alarm a gh-t SIGALRM-mal (142) állítja le.
-    perl -e 'alarm shift; exec @ARGV' "$wait_max" \
-      "$gh_bin" run watch "$id" -R "$full" --exit-status --interval "$poll" > /dev/null 9>&-
-    rc=$?
+    # Kivárás időkerettel: a perl alarm a gh-t SIGALRM-mal (142) állítja le. A watch nem
+    # nullás kódja még nem bukás: egy átmeneti API-hiba (pl. TLS handshake timeout) is
+    # 1-gyel lépteti ki, miközben a futás még tart. Ezért ilyenkor a futás állapotát
+    # kérdezzük; ha még nem `completed`, a maradék kereten belül újra figyelünk, így a
+    # következő sor csak ennek a futásnak a végén indul.
+    deadline=$((SECONDS + wait_max))
+    while :; do
+      left=$((deadline - SECONDS))
+      if [[ "$left" -le 0 ]]; then
+        rc=142
+        break
+      fi
+      perl -e 'alarm shift; exec @ARGV' "$left" \
+        "$gh_bin" run watch "$id" -R "$full" --exit-status --interval "$poll" > /dev/null 9>&-
+      rc=$?
+      [[ "$rc" -eq 0 || "$rc" -eq 142 ]] && break
+      state="$("$gh_bin" run view "$id" -R "$full" --json status,conclusion --jq '"\(.status) \(.conclusion)"' 9>&- 2> /dev/null)"
+      if [[ "${state%% *}" == completed ]]; then
+        [[ "${state#* }" == success ]] && rc=0
+        break
+      fi
+      log "figyelmeztetés: a gh run watch $rc-gyel kilépett, de a futás nem ért véget (${state:-állapot ismeretlen}), újra figyelem: $url"
+      sleep "$poll"
+    done
     if [[ "$rc" -eq 0 ]]; then
       log "kész: success: $url"
       continue
@@ -99,8 +119,7 @@ for freq in $want; do
     if [[ "$rc" -eq 142 ]]; then
       log "HIBA: $wait_max mp után sem ért véget, továbblépek: $url"
     else
-      conclusion="$("$gh_bin" run view "$id" -R "$full" --json conclusion --jq .conclusion 9>&- 2> /dev/null)"
-      log "HIBA: ${conclusion:-ismeretlen (gh run watch: $rc)}: $url"
+      log "HIBA: ${state#* }: $url"
     fi
   done 3< "$list"
 done
