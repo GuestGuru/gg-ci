@@ -47,9 +47,10 @@ A repó térképe:
 ## Kemény szabályok és csapdák
 
 - **A repó publikus, ezért titok nem kerülhet bele** (IT-1496). **Tilos:** titok és
-  hozzáférést adó adat (token, kulcs, jelszó, connection string, bypass-titok),
-  ügyfél- és személyes adat, közvetlenül kihasználható biztonsági részlet. **Mehet:**
-  belső útvonal, VM-, repó- és domainnév, Vercel/Neon projekt- és team-ID. Őr:
+  hozzáférést adó adat (token, kulcs, jelszó, connection string, bypass-titok, privát
+  kulcs), ügyfél- és személyes adat, közvetlenül kihasználható biztonsági részlet.
+  **Mehet:** belső útvonal, VM- és profilnév, runner-szám, repó- és domainnév,
+  app-specifikus alapérték, Vercel/Neon projekt- és team-ID. Őr:
   `test/secret-guard.test.ts`. Miért nem lehet privát: `docs/claude-md-reszletek.md`.
 - **A fogyasztó repók PR-jai nem módosíthatják a saját `.github/workflows/`
   fájljaikat.** Bármelyik bájt megváltozása `Workflow content is not approved`,
@@ -114,7 +115,8 @@ A repó térképe:
 
 Az org-ruleset (19620909) kötelező `quality-gate / verify` checkje és a `GG smoke gate`
 ruleset (19738275) fedi a fogyasztókat; a bekötést naponta a `tools` delivery-doctor méri.
-A privát repók CI-ja saját runneren (`gg-runner`), a publikus gg-ci-é a felhőben fut.
+A privát repók CI-ja saját runneren (`gg-runner`) fut, kivétel a `gg-sales` `ci` és a
+`BPDBv2` (Blacksmith); a publikus gg-ci-é a felhőben.
 A szerkezet története: `docs/claude-md-reszletek.md`.
 
 ## Hol van a többi tudás
