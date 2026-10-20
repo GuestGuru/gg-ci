@@ -7,7 +7,9 @@
 #   scheduled-dispatch/install.sh --uninstall   # leveszi a LaunchAgentet, törli a másolatot
 #
 # A dispatch.sh és a schedule.tsv másolata az INSTALL_DIR-be kerül (nem a checkoutra
-# mutat: egy worktree törlése vagy ágváltás nem viszi el az indítót). Kézi próba:
+# mutat: egy worktree törlése vagy ágváltás nem viszi el az indítót). Kézi próba (a
+# `run-now` fájl nélkül a launchd-indítás 01 UTC-n kívül némán kilép):
+#   touch ~/.local/share/gg-ci/scheduled-dispatch/run-now
 #   launchctl kickstart gui/$(id -u)/hu.guestguru.gg-ci-scheduled-dispatch
 # Napló: ~/Library/Logs/gg-ci-scheduled-dispatch/dispatch.log
 #
@@ -61,7 +63,8 @@ case "$op" in
     ;;
   uninstall)
     "$launchctl_bin" bootout "$domain/$label" 2>/dev/null || true
-    rm -f "$plist" "$install_dir/dispatch.sh" "$install_dir/schedule.tsv"
+    rm -f "$plist" "$install_dir/dispatch.sh" "$install_dir/schedule.tsv" \
+      "$install_dir/dispatch.lock" "$install_dir/run-now"
     rmdir "$install_dir" 2>/dev/null || true
     echo "eltávolítva: $label (a napló marad: $log_dir)"
     ;;

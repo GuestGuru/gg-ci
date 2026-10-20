@@ -3,58 +3,67 @@
 # és a schedule.tsv minden sorára `gh workflow run`-t küld: a workflow a saját runneren
 # (gg-runner) fut, GitHub-perc nélkül. Ha a gg-mb áll, az aznapi futás kimarad.
 #
-#   dispatch.sh [auto|nightly|weekly|all]
+#   dispatch.sh [auto|nightly|weekly|all|scheduled]
 #
-# auto (alap): a nightly sorok, hétfőn utánuk a weekly sorok is. A sorok egymás után
-# futnak: minden indítás után megvárja a futás végét (legfeljebb
-# GG_DISPATCH_WAIT_SECONDS), csak utána jön a következő. Ha egy indítás vagy futás
-# hibázik, a többit akkor is végigviszi, és a végén 1-gyel lép ki.
+# auto (alap): a nightly sorok, hétfőn (UTC) utánuk a weekly sorok is. scheduled: a
+# launchd módja — óránként hívja, és csak GG_DISPATCH_UTC_HOUR órában (01 UTC) fut
+# auto-ként, máskor némán kilép; így az időpont nyáron és télen is 01:30 UTC. Egyszeri
+# kivétel: ha van `run-now` fájl a szkript mellett, törli, és azonnal fut (kézi próba
+# `launchctl kickstart`-tal, l. README).
+#
+# A sorok egymás után futnak: minden indítás után a `gh workflow run` által visszaadott
+# futást várja ki (`gh run watch --exit-status`, legfeljebb GG_DISPATCH_WAIT_SECONDS),
+# csak utána jön a következő. Ha egy indítás vagy futás hibázik, a többit akkor is
+# végigviszi, és a végén 1-gyel lép ki.
 #
 # Hitelesítés: a gg-mb helyi `gh` bejelentkezése (~/.config/gh/hosts.yml).
 # Felülírható (főleg a teszthez): GG_DISPATCH_LIST, GG_DISPATCH_WAIT_SECONDS (5400),
-# GG_DISPATCH_POLL_SECONDS (30), GG_DISPATCH_WEEKDAY (`date +%u`), GG_DISPATCH_GH (gh),
-# GG_DISPATCH_OWNER (GuestGuru), GG_DISPATCH_LOCK.
+# GG_DISPATCH_POLL_SECONDS (30), GG_DISPATCH_WEEKDAY (`date -u +%u`),
+# GG_DISPATCH_HOUR (`date -u +%H`), GG_DISPATCH_UTC_HOUR (01), GG_DISPATCH_GH (gh),
+# GG_DISPATCH_OWNER (GuestGuru), GG_DISPATCH_LOCK, GG_DISPATCH_RUN_NOW.
 set -uo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 list="${GG_DISPATCH_LIST:-$script_dir/schedule.tsv}"
 wait_max="${GG_DISPATCH_WAIT_SECONDS:-5400}"
 poll="${GG_DISPATCH_POLL_SECONDS:-30}"
-weekday="${GG_DISPATCH_WEEKDAY:-$(date +%u)}"
+weekday="${GG_DISPATCH_WEEKDAY:-$(date -u +%u)}"
+hour="${GG_DISPATCH_HOUR:-$(date -u +%H)}"
+utc_hour="${GG_DISPATCH_UTC_HOUR:-01}"
 gh_bin="${GG_DISPATCH_GH:-gh}"
 owner="${GG_DISPATCH_OWNER:-GuestGuru}"
-lock="${GG_DISPATCH_LOCK:-${TMPDIR:-/tmp}/gg-ci-scheduled-dispatch.lock}"
+lock="${GG_DISPATCH_LOCK:-$script_dir/dispatch.lock}"
+run_now="${GG_DISPATCH_RUN_NOW:-$script_dir/run-now}"
+
+log() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 
 mode="${1:-auto}"
+if [[ "$mode" == scheduled ]]; then
+  if [[ -e "$run_now" ]]; then
+    rm -f "$run_now"
+    log "kézi indítás (run-now)"
+  elif [[ "$hour" != "$utc_hour" ]]; then
+    exit 0
+  fi
+  mode=auto
+fi
 case "$mode" in
   auto) if [[ "$weekday" == 1 ]]; then want="nightly weekly"; else want="nightly"; fi ;;
   nightly | weekly) want="$mode" ;;
   all) want="nightly weekly" ;;
-  *) echo "használat: $0 [auto|nightly|weekly|all]" >&2; exit 2 ;;
+  *) echo "használat: $0 [auto|nightly|weekly|all|scheduled]" >&2; exit 2 ;;
 esac
 
-log() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
-
-# Két egyidejű indítás (pl. kézi kickstart az éjszakai futás alatt) ne fusson egymásra.
-if ! mkdir "$lock" 2>/dev/null; then
+# Két egyidejű indítás (pl. kézi próba az éjszakai futás alatt) ne fusson egymásra. A zár
+# a 9-es leírón nyitott fájl flock-ja: a processzel együtt szűnik meg (crash vagy SIGKILL
+# után sem marad bent). A perl csak megszerzi; a zár a közös fájlleíróhoz tartozik.
+exec 9>"$lock"
+if ! perl -MFcntl=:flock -e 'open(my $fh, ">&=", 9) or exit 2; flock($fh, LOCK_EX | LOCK_NB) or exit 1'; then
   log "HIBA: már fut egy indítás ($lock)"
   exit 1
 fi
-trap 'rmdir "$lock" 2>/dev/null || true' EXIT
 
 [[ -r "$list" ]] || { log "HIBA: a lista nem olvasható: $list"; exit 1; }
-
-# A futás azonosítása: a dispatch előtti időpontnál (30 mp óraeltéréssel) nem
-# régebbi legfrissebb workflow_dispatch futás az adott workflow-n.
-since() {
-  date -u -v-30S +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '30 seconds ago' +%Y-%m-%dT%H:%M:%SZ
-}
-
-find_run() { # <repó> <workflow> <ref> <since> → "<id> <url>"
-  "$gh_bin" run list -R "$1" -w "$2" -b "$3" -e workflow_dispatch -L 10 \
-    --json databaseId,createdAt,url \
-    --jq "[.[] | select(.createdAt >= \"$4\")] | sort_by(.createdAt) | last | select(. != null) | \"\(.databaseId) \(.url)\""
-}
 
 failed=0
 for freq in $want; do
@@ -63,50 +72,35 @@ for freq in $want; do
     [[ -z "$repo" || "$repo" == \#* ]] && continue
     [[ "$every" == "$freq" ]] || continue
     full="$owner/$repo"
-    start="$(since)"
-    if ! "$gh_bin" workflow run "$workflow" -R "$full" --ref "$ref" >/dev/null; then
+    # A gh (nem terminálon) a létrehozott futás URL-jét írja ki: ezt és csak ezt követjük.
+    if ! out="$("$gh_bin" workflow run "$workflow" -R "$full" --ref "$ref" 9>&-)"; then
       log "HIBA: nem indult: $full $workflow@$ref"
       failed=1
       continue
     fi
-    log "elindítva: $full $workflow@$ref ($freq)"
-
-    # a futás pár mp múlva jelenik meg a listában: legfeljebb 12 próba, 10 mp-enként
-    run=""
-    for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
-      sleep "$((poll < 10 ? poll : 10))"
-      run="$(find_run "$full" "$workflow" "$ref" "$start" 2>/dev/null || true)"
-      [[ -n "$run" ]] && break
-    done
-    if [[ -z "$run" ]]; then
-      log "HIBA: a futás nem látszik 120 mp után: $full $workflow"
+    url="$(grep -Eo 'https://[^[:space:]]+/actions/runs/[0-9]+' <<< "$out" | tail -n 1)"
+    if [[ -z "$url" ]]; then
+      log "HIBA: elindult, de a gh nem adta vissza a futás URL-jét: $full $workflow@$ref"
       failed=1
       continue
     fi
-    id="${run%% *}"
-    url="${run#* }"
-    log "futás: $url"
+    id="${url##*/}"
+    log "elindítva: $full $workflow@$ref ($freq): $url"
 
-    conclusion=""
-    waited=0
-    while :; do
-      state="$("$gh_bin" run view "$id" -R "$full" --json status,conclusion --jq '"\(.status) \(.conclusion)"' 2>/dev/null || true)"
-      if [[ "${state%% *}" == completed ]]; then
-        conclusion="${state#* }"
-        break
-      fi
-      [[ "$waited" -ge "$wait_max" ]] && break
-      sleep "$poll"
-      waited=$((waited + (poll > 0 ? poll : 1)))
-    done
-    if [[ -z "$conclusion" ]]; then
-      log "HIBA: $wait_max mp után sem ért véget, továbblépek: $url"
-      failed=1
-    elif [[ "$conclusion" != success ]]; then
-      log "HIBA: $conclusion: $url"
-      failed=1
-    else
+    # Kivárás időkerettel: a perl alarm a gh-t SIGALRM-mal (142) állítja le.
+    perl -e 'alarm shift; exec @ARGV' "$wait_max" \
+      "$gh_bin" run watch "$id" -R "$full" --exit-status --interval "$poll" > /dev/null 9>&-
+    rc=$?
+    if [[ "$rc" -eq 0 ]]; then
       log "kész: success: $url"
+      continue
+    fi
+    failed=1
+    if [[ "$rc" -eq 142 ]]; then
+      log "HIBA: $wait_max mp után sem ért véget, továbblépek: $url"
+    else
+      conclusion="$("$gh_bin" run view "$id" -R "$full" --json conclusion --jq .conclusion 9>&- 2> /dev/null)"
+      log "HIBA: ${conclusion:-ismeretlen (gh run watch: $rc)}: $url"
     fi
   done 3< "$list"
 done

@@ -305,15 +305,47 @@ commands (`test/runner-scripts.test.ts`).
 
 Wide (slow) test suites are not scheduled with `schedule:` triggers: a cron job always runs on
 `ubuntu-latest` and costs GitHub minutes. Instead a LaunchAgent on gg-mb sends a
-`workflow_dispatch` every night, and the run lands on the self-hosted runner.
+`workflow_dispatch` at 01:30 UTC, and the run lands on the self-hosted runner. If gg-mb is
+down, that night is skipped.
 
-- The list is `scheduled-dispatch/schedule.tsv` (repo, workflow file, ref, `nightly`|`weekly`).
-  `weekly` rows run on Monday after the nightly ones; every run is awaited before the next starts.
-- The caller workflow has a `workflow_dispatch` trigger and
-  `runs-on: ${{ vars.GG_CI_RUNNER || 'ubuntu-latest' }}`, and reports its own failure (issue or Slack).
-- Install on gg-mb from the main checkout: `scheduled-dispatch/install.sh` (`--check`, `--uninstall`).
-  Manual run: `launchctl kickstart gui/$(id -u)/hu.guestguru.gg-ci-scheduled-dispatch`.
-  Log: `~/Library/Logs/gg-ci-scheduled-dispatch/dispatch.log`. If gg-mb is down, that night is skipped.
+- **The list** is `scheduled-dispatch/schedule.tsv` (repo, workflow file, ref, `nightly`|`weekly`).
+  `weekly` rows run on Monday (UTC) after the nightly ones.
+- **One run at a time:** `dispatch.sh` takes the run URL that `gh workflow run` prints and waits
+  for exactly that run (`gh run watch --exit-status`, at most `GG_DISPATCH_WAIT_SECONDS`, 90 min)
+  before dispatching the next row. A failed dispatch or run does not stop the rest; the script
+  exits 1 at the end. A second dispatcher refuses to start while one runs (a `flock` on
+  `dispatch.lock`, released with the process, so a crash leaves no stale lock).
+- **01:30 UTC all year:** launchd only knows local time, so the agent fires every hour at :30
+  in `scheduled` mode, and the script proceeds only when the UTC hour is `01`.
+- **The caller workflow** has only a `workflow_dispatch` trigger and
+  `runs-on: ${{ vars.GG_CI_RUNNER || 'ubuntu-latest' }}`. A `notify-failure` job reports a failed
+  default-branch run with the shared action, one open issue per title:
+
+  ```yaml
+  notify-failure:
+    needs: wide
+    if: ${{ always() && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && needs.wide.result != 'success' }}
+    runs-on: ${{ vars.GG_CI_RUNNER || 'ubuntu-latest' }}
+    permissions:
+      issues: write
+    steps:
+      - uses: GuestGuru/gg-ci/.github/actions/wide-suite-failure@main
+        with:
+          title: "Bő sor bukás: <workflow name>"   # assignee defaults to kratam
+  ```
+
+  A new workflow file in a policy-gated repo needs its hash in `approvedWorkflowInventories`
+  (the usual gg-ci PR → re-pin → close/reopen chain).
+- **Install** on gg-mb from the main checkout: `scheduled-dispatch/install.sh` (`--check`,
+  `--uninstall`). Log: `~/Library/Logs/gg-ci-scheduled-dispatch/dispatch.log`.
+- **Manual run through launchd** (outside 01 UTC the agent exits quietly unless `run-now` exists):
+
+  ```bash
+  touch ~/.local/share/gg-ci/scheduled-dispatch/run-now
+  launchctl kickstart gui/$(id -u)/hu.guestguru.gg-ci-scheduled-dispatch
+  ```
+
+  Or run `~/.local/share/gg-ci/scheduled-dispatch/dispatch.sh [nightly|weekly|all]` directly.
 
 ## Neon preview branches
 
