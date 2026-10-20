@@ -69,7 +69,8 @@ const holdLock = (lock: string) =>
 		lock,
 	])
 
-describe('scheduled-dispatch: dispatch.sh', () => {
+// Minden eset több bash/perl/stub processzt indít: terhelt gépen az 5 s-os alapkeret kevés.
+describe('scheduled-dispatch: dispatch.sh', { timeout: 20_000 }, () => {
 	let tmp: string
 	beforeEach(() => {
 		tmp = mkdtempSync(join(tmpdir(), 'gg-dispatch-'))
