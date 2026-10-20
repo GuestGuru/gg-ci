@@ -301,6 +301,20 @@ workflow inventory, so no re-pin. After the merge, run `runner/install.sh` on th
 `shellcheck` is missing) and exercises `install.sh` against stub `colima` and `systemctl`
 commands (`test/runner-scripts.test.ts`).
 
+## Scheduled wide test suites (IT-1808)
+
+Wide (slow) test suites are not scheduled with `schedule:` triggers: a cron job always runs on
+`ubuntu-latest` and costs GitHub minutes. Instead a LaunchAgent on gg-mb sends a
+`workflow_dispatch` every night, and the run lands on the self-hosted runner.
+
+- The list is `scheduled-dispatch/schedule.tsv` (repo, workflow file, ref, `nightly`|`weekly`).
+  `weekly` rows run on Monday after the nightly ones; every run is awaited before the next starts.
+- The caller workflow has a `workflow_dispatch` trigger and
+  `runs-on: ${{ vars.GG_CI_RUNNER || 'ubuntu-latest' }}`, and reports its own failure (issue or Slack).
+- Install on gg-mb from the main checkout: `scheduled-dispatch/install.sh` (`--check`, `--uninstall`).
+  Manual run: `launchctl kickstart gui/$(id -u)/hu.guestguru.gg-ci-scheduled-dispatch`.
+  Log: `~/Library/Logs/gg-ci-scheduled-dispatch/dispatch.log`. If gg-mb is down, that night is skipped.
+
 ## Neon preview branches
 
 Gives every pull request an isolated, production-forked Neon database that the Vercel

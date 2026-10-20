@@ -44,6 +44,7 @@ A repó térképe:
 | `src/cli.ts`, `src/commands/`, `src/neon.ts`, `src/vercel.ts` | a preview CLI |
 | `src/trust-inventory.json` | a központi bizalmi fájlok hash-manifestje |
 | `runner/` | a gg-runner VM (gg-mb, Colima `ci` profil) szkriptjei: `disk-guard.sh` (JOB_COMPLETED hook), `playwright-install.sh` (a VM-ben `/opt/gg-playwright/telepit.sh`), `install.sh` (telepítés + visszamérés, `--check`), IT-1496 |
+| `scheduled-dispatch/` | a bő tesztsorok gg-mb-s indítója (IT-1808): `schedule.tsv` (repó, workflow, ref, nightly/weekly), `dispatch.sh` (`gh workflow run` + a futás kivárása, egymás után), `install.sh` (LaunchAgent `hu.guestguru.gg-ci-scheduled-dispatch`, `--check`, `--uninstall`); sima PR, re-pin nem kell |
 
 ## Kemény szabályok és csapdák
 
