@@ -92,24 +92,29 @@ for freq in $want; do
     # 1-gyel lépteti ki, miközben a futás még tart. Ezért ilyenkor a futás állapotát
     # kérdezzük; ha még nem `completed`, a maradék kereten belül újra figyelünk, így a
     # következő sor csak ennek a futásnak a végén indul.
+    # A watch, az állapotlekérés és az alvás is a közös határidőn belül marad (a gh-t a
+    # perl alarm a maradék idő után leállítja), tehát beragadt API mellett sem csúszik túl.
     deadline=$((SECONDS + wait_max))
+    rc=142
     while :; do
       left=$((deadline - SECONDS))
-      if [[ "$left" -le 0 ]]; then
-        rc=142
-        break
-      fi
+      [[ "$left" -gt 0 ]] || { rc=142; break; }
       perl -e 'alarm shift; exec @ARGV' "$left" \
         "$gh_bin" run watch "$id" -R "$full" --exit-status --interval "$poll" > /dev/null 9>&-
       rc=$?
       [[ "$rc" -eq 0 || "$rc" -eq 142 ]] && break
-      state="$("$gh_bin" run view "$id" -R "$full" --json status,conclusion --jq '"\(.status) \(.conclusion)"' 9>&- 2> /dev/null)"
+      left=$((deadline - SECONDS))
+      [[ "$left" -gt 0 ]] || { rc=142; break; }
+      state="$(perl -e 'alarm shift; exec @ARGV' "$left" \
+        "$gh_bin" run view "$id" -R "$full" --json status,conclusion --jq '"\(.status) \(.conclusion)"' 9>&- 2> /dev/null)"
       if [[ "${state%% *}" == completed ]]; then
         [[ "${state#* }" == success ]] && rc=0
         break
       fi
       log "figyelmeztetés: a gh run watch $rc-gyel kilépett, de a futás nem ért véget (${state:-állapot ismeretlen}), újra figyelem: $url"
-      sleep "$poll"
+      left=$((deadline - SECONDS))
+      [[ "$left" -gt 0 ]] || { rc=142; break; }
+      sleep "$((poll < left ? poll : left))"
     done
     if [[ "$rc" -eq 0 ]]; then
       log "kész: success: $url"

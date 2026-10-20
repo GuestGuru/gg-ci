@@ -44,7 +44,8 @@ describe('scheduled-dispatch: schedule.tsv', () => {
 // A hamis gh: a `workflow run` a futás URL-jét írja ki (mint a valódi, nem terminálon),
 // az azonosító 1000 + az indítás sorszáma; a FAIL_REPO-ra hibázik, a NOURL_REPO-ra URL nélkül
 // sikeres. A `run watch` a WATCH_FAIL azonosítóra 1-gyel lép ki, WATCH_SLEEP mellett
-// lóg, WATCH_FLAKY mellett az első hívása hibázik; a `run view` a VIEW_STATE-et adja. Minden hívás a GH_CALLS fájlba íródik.
+// lóg, WATCH_FLAKY mellett az első hívása hibázik; a `run view` a VIEW_STATE-et adja,
+// VIEW_SLEEP mellett lóg. Minden hívás a GH_CALLS fájlba íródik.
 const ghStub = `#!/bin/bash
 echo "$*" >> "$GH_CALLS"
 case "$1 $2" in
@@ -58,7 +59,9 @@ case "$1 $2" in
 		# az első watch átmeneti hibával lép ki (mint egy TLS handshake timeout)
 		[[ -n "\${WATCH_FLAKY:-}" && "$(grep -c "^run watch" "$GH_CALLS")" == 1 ]] && exit 1
 		exit 0 ;;
-	"run view") echo "\${VIEW_STATE:-completed failure}" ;;
+	"run view")
+		[[ -n "\${VIEW_SLEEP:-}" ]] && exec sleep "$VIEW_SLEEP"
+		echo "\${VIEW_STATE:-completed failure}" ;;
 esac
 `
 
@@ -165,6 +168,19 @@ describe('scheduled-dispatch: dispatch.sh', { timeout: 20_000 }, () => {
 		const result = run(['nightly'], { WATCH_FAIL: '1001', VIEW_STATE: 'completed success' })
 		expect(result.status, result.stdout + result.stderr).toBe(0)
 		expect(result.stdout).toContain('kész: success: https://github.com/GuestGuru/a/actions/runs/1001')
+	})
+
+	// A közös keret a watch utáni állapotlekérésre és az alvásra is érvényes: sem egy beragadt
+	// `run view`, sem a keretnél hosszabb poll nem csúsztatja túl (a stub 30 mp-ig lógna).
+	it.each([
+		['a hanging run view', { VIEW_SLEEP: '30' }],
+		['a poll longer than the remaining time', { VIEW_STATE: 'in_progress ', GG_DISPATCH_POLL_SECONDS: '30' }],
+	])('keeps the wait budget after a watch error with %s', (_name, extra) => {
+		const started = Date.now()
+		const result = run(['weekly'], { WATCH_FLAKY: '1', GG_DISPATCH_WAIT_SECONDS: '2', ...extra })
+		expect(Date.now() - started).toBeLessThan(15_000)
+		expect(result.status).toBe(1)
+		expect(result.stdout).toContain('2 mp után sem ért véget')
 	})
 
 	it('stops waiting after GG_DISPATCH_WAIT_SECONDS and moves on', () => {
