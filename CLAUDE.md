@@ -16,9 +16,8 @@ Node ≥ 24. Nincs lint és nincs build lépés.
 
 ```bash
 npm ci
-npm test            # vitest run — 16 fájl, 187 teszt, ~5 s (mérve 2026-10-09;
-                    # macOS-en 4 kihagyva: GNU timeout kell hozzájuk, a CI futtatja;
-                    # a shellcheck-teszt helyben csak akkor fut, ha van shellcheck)
+npm test            # vitest run (macOS-en pár teszt kimarad: GNU timeout és
+                    # shellcheck kell hozzájuk, a CI futtatja)
 npm run typecheck
 npm run gg-ci -- <parancs> …     # preview CLI: ensure | destroy | refresh-ttl |
                                  # reset-shared | alias-set | alias-remove
@@ -47,18 +46,11 @@ A repó térképe:
 
 ## Kemény szabályok és csapdák
 
-- **A repó publikus, ezért titok nem kerülhet bele** (Tamás, 2026-10-09, IT-1496; a
-  korábbi „semmi infrastruktúra-azonosító” szabályt váltja). **Tilos:** titok és
-  hozzáférést adó adat (token, API-kulcs, jelszó, connection string, bypass-titok,
-  privát kulcs), ügyfél- és személyes adat, közvetlenül kihasználható biztonsági
-  részlet. **Mehet:** belső útvonal, VM- és profilnév, runner-szám, repó- és
-  domainnév, app-specifikus alapérték, Vercel/Neon projekt- és team-ID. A
-  workflow-inputos általánosság ajánlott, ahol több hívó használja, de nem kötelező.
-  Az őr a `test/secret-guard.test.ts`: minden verziókövetett fájlban titok ALAKÚ
-  szöveget keres (connection string jelszóval, privát kulcs, GitHub/Neon/Linear/
-  Slack/LLM/AWS-kulcs), az `npm test` része. Privát nem lehet: a reusable workflow-k
-  saját magukat checkoutolják a HÍVÓ `GITHUB_TOKEN`-jével, ami privát gg-ci-t nem
-  lát (IT-285, élesben mérve).
+- **A repó publikus, ezért titok nem kerülhet bele** (IT-1496). **Tilos:** titok és
+  hozzáférést adó adat (token, kulcs, jelszó, connection string, bypass-titok),
+  ügyfél- és személyes adat, közvetlenül kihasználható biztonsági részlet. **Mehet:**
+  belső útvonal, VM-, repó- és domainnév, Vercel/Neon projekt- és team-ID. Őr:
+  `test/secret-guard.test.ts`. Miért nem lehet privát: `docs/claude-md-reszletek.md`.
 - **A fogyasztó repók PR-jai nem módosíthatják a saját `.github/workflows/`
   fájljaikat.** Bármelyik bájt megváltozása `Workflow content is not approved`,
   amíg a hash itt nincs jóváhagyva. A sorrend háromlépcsős, és a 2. lépés kézi:
@@ -90,14 +82,11 @@ A repó térképe:
   a saját runner aludhat. A változó törlése az egylépéses vészfék (IT-570).
 - **Saját runneren nincs `setup-node` cache** (IT-966): a gg-ci workflow-iban
   `cache: ${{ runner.environment == 'github-hosted' && 'npm' || '' }}` +
-  `package-manager-cache: false`, a hívók fix `gg-runner` jobjaiban nincs `cache:`
-  (a perzisztens `~/.npm` megmarad, a GitHub-cache ott ~1 GB, 50–100 s jobonként).
+  `package-manager-cache: false`, a hívók fix `gg-runner` jobjaiban nincs `cache:`.
   **A policy ellenőrzi** (IT-974, `validateRunnerInvariants`), a `packageManager`-es
   repókban (tools, gg-tracker) a `package-manager-cache: false` kötelező.
 - **Saját runneren a `pnpm/action-setup` `dest`-je `${{ runner.temp }}/setup-pnpm`**
-  (IT-971): a default `~/setup-pnpm` a runner-példányok (2026-10-06 óta négy, IT-1323) közös HOME-ja, és az action
-  minden jobban törli — két egyszerre induló job egymás alól törli a pnpm-et. **A
-  policy ellenőrzi** (IT-974). A `services:` konténer viszont **nem köthet fix
+  (IT-971; a default a runner-példányok közös HOME-ja). **A policy ellenőrzi** (IT-974). A `services:` konténer viszont **nem köthet fix
   host-portot** (IT-924, közös Docker-daemon): `ports: - 5432` +
   `localhost:${{ job.services.<név>.ports['5432'] }}` — ezt a policy NEM ellenőrzi,
   hívói hash jóváhagyásakor nézd meg.
@@ -105,55 +94,28 @@ A repó térképe:
   PR (a `runner/` nincs a workflow-leltárban, re-pin nem kell), merge után a gg-mb-n
   `runner/install.sh` (csak az eltérőt írja, atomikus cserével, a runnereket nem indítja
   újra), drift-mérés: `runner/install.sh --check`. A VM-en kézzel ne szerkeszd őket.
-- **A Playwright-telepítés a gg-ci közös actionje** (IT-1256):
-  `.github/actions/playwright-chromium` (a logika az `install.sh`-ban, tesztje a
-  `test/playwright-chromium-action.test.ts`), a hívók `@main`-nel hivatkoznak rá. A
-  böngésző kötelező, az `install-deps` best-effort, 120 mp-es kerettel (GNU `timeout`
-  a szkriptben, mert composite lépésen nincs `timeout-minutes`; előzmény IT-782,
-  IT-1253). Az action módosítása **egy sima PR, re-pin nélkül**, és a következő
-  futástól minden hívóra hat. **A policy ellenőrzi**: workflow `run:`-ban nyers
-  `playwright install`/`install-deps` hibát ad. A hívó lépésén a `working-directory`
-  input kell, ha a job `defaults.run`-nal másik mappában fut (BPDBv2, irnok: `web`) —
-  a composite lépés ezt nem örökli.
-- **A PR-hoszt sima deployment-alias, SOHA nem projekt-domain** (IT-1046, mérve
-  2026-09-25): a kötetlen projekt-domain production-domain (minden prod-deploy elviszi, a
-  PR-link az éles kódot és DB-t mutatja); a git-ághoz kötött preview-domain, a Vercel-védelem
-  302/401-et ad a smoke-nak (gg-ci#93 → #94). Az `alias-set` sima aliast ír, és alias-szintű
-  Deployment Protection Exceptiont tesz rá (`alias-protection-override`), ha a projekt
-  védelme szűkebb az `all`-nál. Elutasítja a nem PR-hosztot (`<app>-pr-<n>.…`), a production
-  és az idegen projekt deployját, és a más projekt aliasát; a régi projekt-domaint leválasztja.
-- **A `preview.yml` `stale`-döntései** (részletek a README „Preview domain" részében):
-  a deploy UTÁN nyíló PR-t a PR-feloldás ≤2 percig várja a GitHub
-  `commits/{sha}/pulls`-ból (IT-983; auto-újratrigger szándékosan nincs, IT-985 —
-  hiányzó smoke gate-nél előbb a runner-sort mérd, jobs API `started_at`); elavult
-  futás nem nyúl az aliashoz, és a `stale`-t két mérés táplálja, egy a checkout előtt,
-  egy az írás előtt (IT-780/IT-810); per-PR adatbázisos hívó `preview-db: true`-val
-  jelzi, hogy a `PREVIEW_DB_ISOLATED` nélkül épült deploy `stale` (IT-913); lezárt
-  PR-re az `Attach alias` nem ír (IT-975, a `pulls/{n}` `.state` az írás előtt).
-  Olvashatatlan állapot minden ágon = nem stale. A hívó smoke-ja a PR-számra ÉS a
-  `stale`-re kapuzzon, a `preview-url` ürességére ne — az a valódi hibát nyelné el.
+- **A Playwright-telepítés a gg-ci közös actionje** (`.github/actions/playwright-chromium`,
+  IT-1256); módosítása sima PR, re-pin nélkül, és minden hívóra hat. Workflow `run:`-ban
+  nyers `playwright install`/`install-deps` tilos (a policy ellenőrzi). `defaults.run`-os
+  hívónál a `working-directory` input kell (BPDBv2, irnok: `web`).
+- **A PR-hoszt sima deployment-alias, SOHA nem projekt-domain** (IT-1046): az
+  `alias-set` csak `<app>-pr-<n>.…` hosztot, csak a saját projekt preview-deployjára ír.
+- **A `preview.yml` `stale`-döntései** (README „Preview domain”, és
+  `docs/claude-md-reszletek.md`): elavult futás nem nyúl az aliashoz; olvashatatlan
+  állapot = nem stale. A hívó smoke-ja a PR-számra ÉS a `stale`-re kapuzzon, a
+  `preview-url` ürességére ne — az a valódi hibát nyelné el.
 - **Minden action-referencia SHA-ra van pinelve** (IT-277), és a policy-evaluátorok
   üres `NODE_OPTIONS`-szel, `npm ci --ignore-scripts --userconfig=/dev/null`-lal
   futnak: a cél-repó npm-konfigurációja nem kerülhet a bizalmi útvonalba.
 - A saját `ci.yml` szándékosan `ubuntu-latest`-en fut, és soha nem fogyaszt secretet,
   és soha nem használ `pull_request_target`-et (publikus repó, fork-PR-ek).
 
-## Jelen állapot (2026-09-23)
+## Jelen állapot (2026-10-20)
 
-Az org-ruleset (a „default branch delivery gate") **12 repót** fed le (`gg-sales`,
-`gg-design`, `BPDBv2`, `gg-agents`, `tools`, `irnok`, `gg-ci`, `gg-tracker`, `gg-mcp`,
-`gg-share`, `gg-ops`, `ainita`), kötelező checkje a `quality-gate / verify`; egy
-második ruleset a `GG smoke gate` commit statust követeli meg 10 repón (a `gg-ci` és a
-`gg-mcp` nélkül). A privát repók CI-ja saját (self-hosted) runneren fut, a publikus
-gg-ci sajátja a felhőben — két kivétel (mérve 2026-09-23): a `gg-sales` `ci` jobja
-`blacksmith-8vcpu-ubuntu-2404`-en, a `BPDBv2` mindhárom workflow-ja
-`blacksmith-2vcpu-ubuntu-2404`-en. A takarék-kapcsoló (`GG_CI_STANDBY`) nincs
-beállítva. A `preview-alias.yml` 2026-09-10 óta nincs (IT-761). A szerkezet
-2026-07-18 (preview-DB CLI) → 07-23 (quality gate, IT-244) → 07-25 (preview.yml,
-policy-leltár) → 09-10 (saját runner, IT-570) → 09-11/14 (stale-javítások,
-IT-780/IT-810) → 09-23 (gg-runner invariánsok a policyban, IT-974; preview-db,
-késői PR, lezárt PR — IT-913/983/975; mind a 9 per-PR DB-s hívó `preview-db: true`)
-lépésekben állt össze.
+Az org-ruleset (19620909) kötelező `quality-gate / verify` checkje és a `GG smoke gate`
+ruleset (19738275) fedi a fogyasztókat; a bekötést naponta a `tools` delivery-doctor méri.
+A privát repók CI-ja saját runneren (`gg-runner`), a publikus gg-ci-é a felhőben fut.
+A szerkezet története: `docs/claude-md-reszletek.md`.
 
 ## Hol van a többi tudás
 
@@ -171,9 +133,6 @@ lépésekben állt össze.
   runner-azonosítók, a költség-mérések és a leckék ott élnek (`project: gg-ci`).
   Kulcsszavak: `workflow-policy`, `quality-gate`, `GG smoke gate`, `GG_CI_STANDBY`,
   `candidate-SHA`, `re-pin`, `self-hosted runner`.
-- **Linear**: „Auth/Tools/CI/Tokens" projekt. Sarokkövek: IT-244, IT-253, IT-271,
-  IT-277, IT-278, IT-283, IT-285, IT-295, IT-570, IT-594, IT-761, IT-780, IT-810,
-  IT-913, IT-974, IT-975, IT-983.
-- **Kapcsolódó repók**: minden fogyasztó (`tools`, `irnok`, `gg-tracker`, `gg-sales`,
-  `gg-design`, `BPDBv2`, `gg-agents`, `gg-share`, `gg-mcp`, `gg-ops`, `ainita`), és a
-  `tools/packages/delivery-doctor`, ami naponta méri a bekötések driftjét.
+- **Linear**: „Auth/Tools/CI/Tokens” projekt (sarokkövek: `docs/claude-md-reszletek.md`).
+- **Kapcsolódó repók**: minden fogyasztó, és a `tools/packages/delivery-doctor`, ami
+  naponta méri a bekötések driftjét.
