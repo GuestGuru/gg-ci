@@ -32,7 +32,7 @@
 # (1217) aznap települt és futott. A használat jele a fájlok atime-ja (a / relatime,
 # tehát naponta legalább egyszer frissül, és a böngésző indítása frissíti).
 #
-# ⚠️ A VM-ben négy runner-példány fut (IT-1323). A hook a saját jobja Worker-
+# ⚠️ A VM-ben több runner-példány fut (2026-10-28 óta kettő, IT-2011). A hook a saját jobja Worker-
 # folyamatán belül fut, ezért a saját Runner.Worker-t (a hook ősét) ki kell
 # hagyni; ha BÁRMELYIK másik Worker fut, a home-cache-eket nem bántja, csak szól.
 # Törlés előtt átnevez: egy közben induló job üres cache-t lát, nem félig

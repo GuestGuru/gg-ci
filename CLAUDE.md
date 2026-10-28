@@ -114,7 +114,7 @@ A repó térképe:
 
 Az org-ruleset (19620909) kötelező `quality-gate / verify` checkje 15 repót, a `GG smoke
 gate` ruleset (19738275) 12 repót fed; a bekötést naponta a `tools` delivery-doctor méri.
-A privát repók CI-ja saját runneren (`gg-runner`) fut, kivétel a `gg-sales` `ci` és a
+A privát repók CI-ja saját runneren (`gg-runner`) fut (2026-10-28 óta két példány, a `ci` VM 6 vCPU / 6 GB, job-napló: `runner/job-report.sh`, IT-2011), kivétel a `gg-sales` `ci` és a
 `BPDBv2` (Blacksmith); a gg-ci-é a felhőben. A bő tesztsorokat a `scheduled-dispatch/`
 indítja (IT-1808). Részletek, repólista, történet: `docs/claude-md-reszletek.md`.
 
