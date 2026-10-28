@@ -1,3 +1,24 @@
+# Runner job-napló (IT-2011)
+
+A `disk-guard.sh` hook elsőként a `job-log.sh`-t hívja (10 mp-es kerettel, hibája nem
+állítja meg az őrt). Minden job végén egy JSON-sor kerül a VM-ben a
+`~/runner-hooks/job-log.jsonl` fájlba (20 MiB fölött `.1`-be forgat): repó, workflow,
+job, run, esemény, ág, PR-szám/-cím/-szerző, actor, runner, a job futásideje és
+CPU-ideje, az átlagos magszám, a VM-ben épp futó jobok száma, a load és a szabad memória.
+Az `issue` az első `IT-<n>` az ágban, a refben, a PR-címben vagy a push commit-üzenetében;
+az `agent` a commit-trailerből (`claude`) vagy az ág előtagjából (`agent/` → `autoagent`,
+`codex/` → `codex`) becsült érték. A Herdr-workspace a runnerből nem látszik.
+
+A CPU-idő a job Runner.Worker folyamatának és megvárt leszármazottainak ideje
+(`/proc/<pid>/stat`), JOB_STARTED hook és runner-újraindítás nélkül. **Nincs benne** a
+Docker-konténerek (`services:` Postgres, `container:` jobok) és a leválasztott
+háttérfolyamatok CPU-ja. Összesítés a gazdagépen:
+
+```bash
+runner/job-report.sh              # utolsó 24 óra, repó · workflow · job szerint
+runner/job-report.sh 72 issue     # csoport: job | repo | issue | agent | runner
+```
+
 # Runner lemezőr
 
 A `disk-guard.sh` a JOB_COMPLETED hook. A work-diszken 15 GB alatt a

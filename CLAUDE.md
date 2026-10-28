@@ -40,7 +40,7 @@ A repó térképe:
 | `src/quality-gate.ts` | a `needs` kiértékelése (fail-closed) |
 | `src/cli.ts`, `src/commands/`, `src/neon.ts`, `src/vercel.ts` | a preview CLI |
 | `src/trust-inventory.json` | a központi bizalmi fájlok hash-manifestje |
-| `runner/` | a gg-runner VM (gg-mb, Colima `ci` profil) szkriptjei: `disk-guard.sh` (JOB_COMPLETED hook), `playwright-install.sh` (a VM-ben `/opt/gg-playwright/telepit.sh`), `install.sh` (telepítés + visszamérés, `--check`), IT-1496 |
+| `runner/` | a gg-runner VM (gg-mb, Colima `ci` profil) szkriptjei: `disk-guard.sh` (JOB_COMPLETED hook), `job-log.sh` + `job-report.sh` (job-napló és összesítő, IT-2011), `playwright-install.sh` (a VM-ben `/opt/gg-playwright/telepit.sh`), `install.sh` (telepítés + visszamérés, `--check`), IT-1496 |
 | `scheduled-dispatch/`, `.github/actions/wide-suite-failure/` | a bő tesztsorok gg-mb-s indítója és közös bukásjelzője (IT-1808, részletek: README); sima PR, re-pin nem kell |
 
 ## Kemény szabályok és csapdák
