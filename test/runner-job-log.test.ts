@@ -123,6 +123,11 @@ describe.runIf(hasJq || process.env.CI)('runner/job-log.sh (IT-2011)', () => {
 		})
 	})
 
+	it('recognises an autoagent branch on a push event from the ref', () => {
+		run({ GITHUB_EVENT_NAME: 'push', GITHUB_REF_NAME: 'agent/task-d810eb4b' })
+		expect(lines()[0]).toMatchObject({ agent: 'autoagent', head_ref: null, ref: 'agent/task-d810eb4b' })
+	})
+
 	it('never fails the job: no Worker, no event file, unwritable log', () => {
 		const noWorker = run({ JOB_LOG_WORKER_PID: '999999' })
 		expect(noWorker.status).toBe(0)

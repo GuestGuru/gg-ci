@@ -85,9 +85,10 @@ line="$(jq -c -n \
   | ($e.head_commit.message // "") as $msg
   | ([$branch, ($ref | nz), $title, $msg] | map(select(. != null) | scan("\\bIT-[0-9]+"; "i") | ascii_upcase) | first // null) as $issue
   | (($msg | capture("Claude-Session: *\\S*/(?<s>session_[A-Za-z0-9]+)") | .s) // null) as $session
+  | ($branch // ($ref | nz) // "") as $any_branch
   | (if ($msg | test("Claude-Session:|Co-Authored-By: *Claude"; "i")) then "claude"
-     elif (($branch // "") | startswith("codex/")) then "codex"
-     elif (($branch // "") | startswith("agent/")) then "autoagent"
+     elif ($any_branch | startswith("codex/")) then "codex"
+     elif ($any_branch | startswith("agent/")) then "autoagent"
      else null end) as $agent
   | {ts: $ts, started_at: $started, duration_s: $duration_s, cpu_s: $cpu_s,
      cpu_cores: (if ($duration_s // 0) > 0 and $cpu_s != null then ($cpu_s / $duration_s * 100 | round / 100) else null end),
@@ -107,10 +108,20 @@ if [[ -z "$line" ]]; then
 fi
 
 mkdir -p "$(dirname "$log")" 2>/dev/null || true
-size="$(stat -c %s "$log" 2>/dev/null || stat -f %z "$log" 2>/dev/null)" || size=0
-if (( ${size:-0} > max_bytes )); then mv -f "$log" "$log.1" 2>/dev/null || true; fi
-# egy sor egyetlen write: a párhuzamos runnerek sorai nem keverednek
-printf '%s\n' "$line" >> "$log" 2>/dev/null || { echo "CI job-napló: nem írható: $log"; exit 0; }
+# A méretmérés, a forgatás és az írás egy zár alatt: két runner egyszerre nem
+# forgathat (a második a friss .1-et írná felül). Ha 5 mp alatt nincs zár, a sor
+# kimarad, a job nem vár tovább. flock nélkül (helyi teszt) zár nélkül ír.
+write_line() {
+  local size
+  size="$(stat -c %s "$log" 2>/dev/null || stat -f %z "$log" 2>/dev/null)" || size=0
+  if (( ${size:-0} > max_bytes )); then mv -f "$log" "$log.1" 2>/dev/null || true; fi
+  printf '%s\n' "$line" >> "$log" 2>/dev/null
+}
+if command -v flock >/dev/null 2>&1; then
+  { flock -w 5 9 && write_line; } 9>>"$log.lock" 2>/dev/null || { echo "CI job-napló: nem írható (vagy foglalt): $log"; exit 0; }
+else
+  write_line || { echo "CI job-napló: nem írható: $log"; exit 0; }
+fi
 
 if [[ "$cpu_s" != null && "$duration_s" != null ]]; then
   echo "CI job-napló: ${duration_s} s, ${cpu_s} CPU-s (konténerek nélkül), ${workers:-?} job futott a VM-ben → ${log}"
