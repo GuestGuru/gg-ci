@@ -53,6 +53,11 @@ ROOT_PW_KEEP="${DISK_GUARD_ROOT_PW_KEEP:-2}"
 TMP_DIR="${DISK_GUARD_TMP_DIR:-/tmp}"
 TMP_KEEP_HOURS="${DISK_GUARD_TMP_KEEP_HOURS:-24}"
 
+# IT-2011: előbb a job-napló (időtartam, CPU, repó, issue); a hiánya vagy hibája
+# nem állítja meg az őrt, és 10 mp-nél tovább nem tarthatja fel a jobot
+job_log="$(dirname "${BASH_SOURCE[0]}")/job-log.sh"
+if [[ -f "$job_log" ]]; then timeout 10 bash "$job_log" || true; fi
+
 # a HOME-ot a runner adja; ha mégis üres, a passwd-ból (a set -u miatt ne álljon le)
 home="${HOME:-$(getent passwd "$(id -un)" | cut -d: -f6)}"
 npm_cache="${home}/.npm/_cacache"
