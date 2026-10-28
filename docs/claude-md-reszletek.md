@@ -19,7 +19,7 @@ checkoutolják a HÍVÓ `GITHUB_TOKEN`-jével, ami privát gg-ci-t nem lát (IT-
 - `setup-node` cache nélkül: a perzisztens `~/.npm` megmarad, a GitHub-cache a
   saját runneren ~1 GB, 50–100 s jobonként (IT-966).
 - `pnpm/action-setup` `dest`: a default `~/setup-pnpm` a runner-példányok
-  (2026-10-06 óta négy, IT-1323) közös HOME-ja, és az action minden jobban törli —
+  (2026-10-06 és 2026-10-28 között négy, IT-1323, azóta kettő, IT-2011) közös HOME-ja, és az action minden jobban törli —
   két egyszerre induló job egymás alól törli a pnpm-et (IT-971).
 
 ## Playwright-action (IT-1256)
