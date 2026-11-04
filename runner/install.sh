@@ -10,6 +10,9 @@
 #   runner/disk-guard-volumes.sh → ~/runner-hooks/disk-guard-volumes.sh (aszinkron kötettakarító, IT-1732)
 #   runner/disk-guard.sh         → ~/runner-hooks/disk-guard.sh   (JOB_COMPLETED hook, IT-762, IT-1494)
 #   runner/playwright-install.sh → /opt/gg-playwright/telepit.sh  (kézi böngésző-telepítő, IT-945)
+#   runner/fstrim-timer-daily.conf → /etc/systemd/system/fstrim.timer.d/gg-daily.conf
+#       (mód 644, root-könyvtár, sudo; napi fstrim, IT-2105 — ha változott, utána
+#       systemctl daemon-reload és az fstrim.timer újraindítása)
 #
 # A futó runnereket nem indítja újra, és a .env-jükhöz nem nyúl: a hook útvonala
 # nem változik, a runner minden job végén újra beolvassa a fájlt, tehát a csere a
@@ -18,17 +21,19 @@
 # Ami már egyezik (sha256 és mód), azt nem írja újra — kétszer futtatva a második
 # futás csak mér.
 #
-# Visszamérés: a négy célfájl sha256-ja a repóéval, és minden runner-példány
+# Visszamérés: az öt célfájl sha256-ja (és módja) a repóéval, és minden runner-példány
 # (systemd `actions.runner.*`) .env-jében az ACTIONS_RUNNER_HOOK_JOB_COMPLETED és a
 # két GG_PLAYWRIGHT* sor. A .env többi sorát nem olvassa ki: titok lehet benne.
 #
 # Felülírható (főleg a teszthez): GG_RUNNER_COLIMA_PROFILE (ci),
-# GG_RUNNER_HOOK_DIR (~/runner-hooks), GG_RUNNER_PLAYWRIGHT_DIR (/opt/gg-playwright).
+# GG_RUNNER_HOOK_DIR (~/runner-hooks), GG_RUNNER_PLAYWRIGHT_DIR (/opt/gg-playwright),
+# GG_RUNNER_SYSTEMD_DIR (/etc/systemd/system).
 set -euo pipefail
 
 profile="${GG_RUNNER_COLIMA_PROFILE:-ci}"
 hook_dir="${GG_RUNNER_HOOK_DIR:-~/runner-hooks}"
 pw_dir="${GG_RUNNER_PLAYWRIGHT_DIR:-/opt/gg-playwright}"
+systemd_dir="${GG_RUNNER_SYSTEMD_DIR:-/etc/systemd/system}"
 src_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 check_only=0
@@ -47,6 +52,8 @@ set -euo pipefail
 resolve() { case "$1" in "~/"*) printf "%s\n" "$HOME/${1#"~/"}" ;; *) printf "%s\n" "$1" ;; esac; }
 sha() { if command -v sha256sum >/dev/null; then sha256sum; else shasum -a 256; fi | cut -d" " -f1; }
 mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
+root=0
+as_root() { if (( root )); then sudo "$@"; else "$@"; fi; }
 op="$1"; shift
 case "$op" in
   state) # <cél> → "<sha256> <mód>", vagy "hiányzik"
@@ -62,6 +69,21 @@ case "$op" in
     cat > "$tmp"
     chmod "$2" "$tmp"
     mv -f "$tmp" "$p"
+    ;;
+  put-root) # <cél> <mód>; mint a put, de root-könyvtárba (sudo, ha nem írható)
+    p="$(resolve "$1")"; d="$(dirname "$p")"
+    mkdir -p "$d" 2>/dev/null || true
+    root=0; [[ -d "$d" && -w "$d" ]] || root=1
+    as_root mkdir -p "$d"
+    tmp="$(as_root mktemp "$d/.install-XXXXXX")"
+    as_root tee "$tmp" >/dev/null
+    as_root chmod "$2" "$tmp"
+    as_root mv -f "$tmp" "$p"
+    ;;
+  reload-fstrim) # <drop-in könyvtár>; csere után: újraolvasás és az időzítő újraszámolása
+    root=0; [[ -w "$(resolve "$1")" ]] || root=1
+    as_root systemctl daemon-reload
+    as_root systemctl restart fstrim.timer
     ;;
   env) # <hook-cél> <playwright-könyvtár>: minden runner-példány .env-jének három sora
     hook="$(resolve "$1")"; pw="$(resolve "$2")"
@@ -101,11 +123,12 @@ command -v colima >/dev/null || { echo "nincs colima a PATH-on: ezt a szkriptet 
 colima status -p "$profile" >/dev/null 2>&1 || { echo "a(z) '$profile' Colima-profil nem fut" >&2; exit 2; }
 
 drift=0
+fstrim_changed=0
 # A segédek a hook ELŐTT települnek: az új hook csak teljes segédet indíthat.
-# forrás (a repóban) | cél (a VM-ben). A lista a 3-as fd-n jön: a `colima ssh`
-# a stdin-t olvassa, és különben megenné a ciklus többi sorát.
-while IFS='|' read -r src dest <&3; do
-  want="$(local_sha "$src_dir/$src") 755"
+# forrás (a repóban) | cél (a VM-ben) | mód | put-művelet. A lista a 3-as fd-n
+# jön: a `colima ssh` a stdin-t olvassa, és különben megenné a ciklus többi sorát.
+while IFS='|' read -r src dest fmode op <&3; do
+  want="$(local_sha "$src_dir/$src") $fmode"
   have="$(vm state "$dest" </dev/null)"
   if [[ "$have" == "$want" ]]; then
     echo "változatlan: $dest (sha256 ${want%% *})"
@@ -113,17 +136,24 @@ while IFS='|' read -r src dest <&3; do
     echo "ELTÉR: $dest — a VM-ben: $have; a repóban: $want" >&2
     drift=1
   else
-    vm put "$dest" 755 < "$src_dir/$src"
+    vm "$op" "$dest" "$fmode" < "$src_dir/$src"
     now="$(vm state "$dest" </dev/null)"
     [[ "$now" == "$want" ]] || { echo "a telepítés után is eltér: $dest — a VM-ben: $now; a repóban: $want" >&2; exit 1; }
     echo "telepítve: $dest (előtte: $have; most: $now)"
+    [[ "$src" != fstrim-timer-daily.conf ]] || fstrim_changed=1
   fi
 done 3<<EOF
-disk-guard-volumes.sh|$hook_dir/disk-guard-volumes.sh
-job-log.sh|$hook_dir/job-log.sh
-disk-guard.sh|$hook_dir/disk-guard.sh
-playwright-install.sh|$pw_dir/telepit.sh
+disk-guard-volumes.sh|$hook_dir/disk-guard-volumes.sh|755|put
+job-log.sh|$hook_dir/job-log.sh|755|put
+disk-guard.sh|$hook_dir/disk-guard.sh|755|put
+playwright-install.sh|$pw_dir/telepit.sh|755|put
+fstrim-timer-daily.conf|$systemd_dir/fstrim.timer.d/gg-daily.conf|644|put-root
 EOF
+
+if (( fstrim_changed )); then
+  vm reload-fstrim "$systemd_dir/fstrim.timer.d" </dev/null
+  echo "fstrim.timer: daemon-reload és újraindítás megtörtént (napi trim)."
+fi
 
 echo "runner-példányok (.env):"
 vm env "$hook_dir/disk-guard.sh" "$pw_dir" </dev/null || drift=1

@@ -62,9 +62,10 @@ exit 64
 `
 
 // list-units: a STUB_UNITS egységei; show -p <tulajdonság> --value <egység>:
-// a munkakönyvtár a VM HOME-ja alatt az egység nevén.
+// a munkakönyvtár a VM HOME-ja alatt az egység nevén; daemon-reload/restart: naplózva.
 const systemctlStub = `#!/bin/bash
 case "$1" in
+	daemon-reload|restart) echo "$*" >> "$STUB_SYSTEMCTL_LOG" ;;
 	list-units)
 		for u in $STUB_UNITS; do echo "$u loaded active running GitHub Actions Runner"; done
 		;;
@@ -88,6 +89,14 @@ describe('runner/install.sh (IT-1496)', { timeout: 30_000 }, () => {
 
 	const hookPath = () => join(vmHome, 'runner-hooks', 'disk-guard.sh')
 	const pwInstaller = () => join(pwDir, 'telepit.sh')
+	const fstrimDropIn = () => join(root, 'systemd', 'fstrim.timer.d', 'gg-daily.conf')
+	const systemctlLog = () => {
+		try {
+			return readFileSync(join(root, 'systemctl.log'), 'utf8')
+		} catch {
+			return ''
+		}
+	}
 
 	const writeEnv = (unit: string, hook = hookPath()) => {
 		mkdirSync(join(vmHome, unit), { recursive: true })
@@ -133,13 +142,15 @@ describe('runner/install.sh (IT-1496)', { timeout: 30_000 }, () => {
 				STUB_VM_HOME: vmHome,
 				STUB_UNITS: units.join(' '),
 				GG_RUNNER_PLAYWRIGHT_DIR: pwDir,
+				GG_RUNNER_SYSTEMD_DIR: join(root, 'systemd'),
+				STUB_SYSTEMCTL_LOG: join(root, 'systemctl.log'),
 				...env,
 			},
 		})
 		return { status: result.status, out: result.stdout, err: result.stderr }
 	}
 
-	it('installs all four scripts byte-identically with mode 755, then reports the runners', () => {
+	it('installs the four scripts (755) and the fstrim drop-in (644) byte-identically, then reports the runners', () => {
 		const r = run()
 		expect(r.err).toBe('')
 		expect(r.status).toBe(0)
@@ -154,6 +165,11 @@ describe('runner/install.sh (IT-1496)', { timeout: 30_000 }, () => {
 		}
 		expect(r.out).toContain(`telepítve: ~/runner-hooks/disk-guard.sh (előtte: hiányzik;`)
 		expect(r.out).toContain(`telepítve: ${pwInstaller()}`)
+		// IT-2105: a napi fstrim drop-in 644-es móddal, utána daemon-reload + timer-újraindítás
+		expect(readFileSync(fstrimDropIn())).toEqual(readFileSync(join(runnerDir, 'fstrim-timer-daily.conf')))
+		expect(statSync(fstrimDropIn()).mode & 0o777).toBe(0o644)
+		expect(systemctlLog()).toBe('daemon-reload\nrestart fstrim.timer\n')
+		expect(r.out).toContain('fstrim.timer: daemon-reload és újraindítás megtörtént')
 		expect(r.out.match(/ {2}rendben: /g)).toHaveLength(2)
 		expect(r.out).toContain('a VM playwright-modulja: nincs telepítve')
 		expect(r.out).toContain('EREDMÉNY: a VM a repóval egyezik.')
@@ -166,8 +182,10 @@ describe('runner/install.sh (IT-1496)', { timeout: 30_000 }, () => {
 			const r = run(args)
 			expect(r.status).toBe(0)
 			expect(r.out).not.toMatch(/^telepítve:/m)
-			expect(r.out.match(/^változatlan: /gm)).toHaveLength(4)
+			expect(r.out.match(/^változatlan: /gm)).toHaveLength(5)
 		}
+		// a változatlan drop-in nem indítja újra a timert
+		expect(systemctlLog()).toBe('daemon-reload\nrestart fstrim.timer\n')
 		expect(statSync(hookPath()).mtimeMs).toBe(before)
 	})
 
