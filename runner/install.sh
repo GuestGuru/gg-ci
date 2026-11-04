@@ -80,10 +80,18 @@ case "$op" in
     as_root chmod "$2" "$tmp"
     as_root mv -f "$tmp" "$p"
     ;;
-  reload-fstrim) # <drop-in könyvtár>; csere után: újraolvasás és az időzítő újraszámolása
-    root=0; [[ -w "$(resolve "$1")" ]] || root=1
+  reload-fstrim) # <drop-in>: újraolvasás és az időzítő újraszámolása
+    root=0; [[ -w "$(dirname "$(resolve "$1")")" ]] || root=1
     as_root systemctl daemon-reload
     as_root systemctl restart fstrim.timer
+    ;;
+  fstrim-state) # <drop-in> → "ok", ha a systemd betöltötte, nem vár reloadra és a timer aktív
+    p="$(resolve "$1")"
+    dropins="$(systemctl show -p DropInPaths --value fstrim.timer)"
+    reload="$(systemctl show -p NeedDaemonReload --value fstrim.timer)"
+    active="$(systemctl show -p ActiveState --value fstrim.timer)"
+    if [[ " $dropins " == *" $p "* && "$reload" == no && "$active" == active ]]; then echo ok
+    else echo "betöltve: $([[ " $dropins " == *" $p "* ]] && echo igen || echo nem), NeedDaemonReload=$reload, ActiveState=$active"; fi
     ;;
   env) # <hook-cél> <playwright-könyvtár>: minden runner-példány .env-jének három sora
     hook="$(resolve "$1")"; pw="$(resolve "$2")"
@@ -123,7 +131,6 @@ command -v colima >/dev/null || { echo "nincs colima a PATH-on: ezt a szkriptet 
 colima status -p "$profile" >/dev/null 2>&1 || { echo "a(z) '$profile' Colima-profil nem fut" >&2; exit 2; }
 
 drift=0
-fstrim_changed=0
 # A segédek a hook ELŐTT települnek: az új hook csak teljes segédet indíthat.
 # forrás (a repóban) | cél (a VM-ben) | mód | put-művelet. A lista a 3-as fd-n
 # jön: a `colima ssh` a stdin-t olvassa, és különben megenné a ciklus többi sorát.
@@ -140,7 +147,6 @@ while IFS='|' read -r src dest fmode op <&3; do
     now="$(vm state "$dest" </dev/null)"
     [[ "$now" == "$want" ]] || { echo "a telepítés után is eltér: $dest — a VM-ben: $now; a repóban: $want" >&2; exit 1; }
     echo "telepítve: $dest (előtte: $have; most: $now)"
-    [[ "$src" != fstrim-timer-daily.conf ]] || fstrim_changed=1
   fi
 done 3<<EOF
 disk-guard-volumes.sh|$hook_dir/disk-guard-volumes.sh|755|put
@@ -150,9 +156,21 @@ playwright-install.sh|$pw_dir/telepit.sh|755|put
 fstrim-timer-daily.conf|$systemd_dir/fstrim.timer.d/gg-daily.conf|644|put-root
 EOF
 
-if (( fstrim_changed )); then
-  vm reload-fstrim "$systemd_dir/fstrim.timer.d" </dev/null
-  echo "fstrim.timer: daemon-reload és újraindítás megtörtént (napi trim)."
+# A drop-in fájl egyezése nem elég: az élő timert mérjük (betöltötte-e a systemd, nem
+# vár-e reloadra, aktív-e). Egy korábbi, félbemaradt reload így a következő futáskor
+# pótlódik, a --check pedig jelzi.
+dropin="$systemd_dir/fstrim.timer.d/gg-daily.conf"
+fstrim="$(vm fstrim-state "$dropin" </dev/null)" || fstrim="nem mérhető"
+if [[ "$fstrim" == ok ]]; then
+  echo "fstrim.timer: él a napi drop-in."
+elif (( check_only )); then
+  echo "ELTÉR: fstrim.timer — $fstrim" >&2
+  drift=1
+else
+  vm reload-fstrim "$dropin" </dev/null
+  fstrim="$(vm fstrim-state "$dropin" </dev/null)" || fstrim="nem mérhető"
+  [[ "$fstrim" == ok ]] || { echo "az fstrim.timer a reload után sem él: $fstrim" >&2; exit 1; }
+  echo "fstrim.timer: daemon-reload és újraindítás megtörtént, él a napi drop-in."
 fi
 
 echo "runner-példányok (.env):"
