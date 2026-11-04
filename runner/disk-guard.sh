@@ -7,7 +7,8 @@
 #   A. a work-diszk (/mnt/lima-colima-ci, IT-762): ha PRUNE_UNDER_GB alatt van a
 #      szabad hely, aszinkron kötettakarítást indít (IT-1732). A segéd az összes
 #      Worker kilépését megvárja, és az új job indítását kizárja a törlés alatt.
-#      A segéd képhez, build cache-hez és work-könyvtárakhoz nem nyúl.
+#      A kötetek után a régi, majd (10 GB alatt) a teljes nem használt Docker
+#      build cache-t is törli (2026-11-04); képhez és work-könyvtárhoz nem nyúl.
 #      Emellett a korábbi lépcső kidobja a KEEP_DAYS napja teljes fájukban
 #      változatlan repo-checkoutokat; a runner saját cache-könyvtárai maradnak.
 #      WARN_UNDER_GB alatt ::warning::.
