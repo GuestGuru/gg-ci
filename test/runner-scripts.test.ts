@@ -62,9 +62,19 @@ exit 64
 `
 
 // list-units: a STUB_UNITS egységei; show -p <tulajdonság> --value <egység>:
-// a munkakönyvtár a VM HOME-ja alatt az egység nevén.
+// a munkakönyvtár a VM HOME-ja alatt az egység nevén. A fstrim.timer modellje: a
+// drop-in a daemon-reload után számít betöltöttnek (marker), és ha a fájl újabb a
+// markernél, NeedDaemonReload=yes. daemon-reload/restart naplózva; STUB_RELOAD_FAIL=1
+// esetén a daemon-reload elbukik.
 const systemctlStub = `#!/bin/bash
+marker="$STUB_SYSTEMCTL_LOG.reloaded"
 case "$1" in
+	daemon-reload)
+		echo "$*" >> "$STUB_SYSTEMCTL_LOG"
+		[ "\${STUB_RELOAD_FAIL:-0}" = 1 ] && exit 1
+		touch "$marker"
+		;;
+	restart) echo "$*" >> "$STUB_SYSTEMCTL_LOG" ;;
 	list-units)
 		for u in $STUB_UNITS; do echo "$u loaded active running GitHub Actions Runner"; done
 		;;
@@ -72,9 +82,12 @@ case "$1" in
 		case "$3" in
 			WorkingDirectory) echo "$STUB_VM_HOME/$5" ;;
 			ActiveState) echo active ;;
+			DropInPaths) [ -e "$marker" ] && [ -f "$STUB_DROPIN" ] && echo "$STUB_DROPIN" ;;
+			NeedDaemonReload) if [ -f "$STUB_DROPIN" ] && [ "$STUB_DROPIN" -nt "$marker" ]; then echo yes; else echo no; fi ;;
 		esac
 		;;
 esac
+exit 0
 `
 
 // egy futás sok `colima ssh` stub-hívás; terhelt gépen az 5 mp-es alapkeret kevés
@@ -88,6 +101,14 @@ describe('runner/install.sh (IT-1496)', { timeout: 30_000 }, () => {
 
 	const hookPath = () => join(vmHome, 'runner-hooks', 'disk-guard.sh')
 	const pwInstaller = () => join(pwDir, 'telepit.sh')
+	const fstrimDropIn = () => join(root, 'systemd', 'fstrim.timer.d', 'gg-daily.conf')
+	const systemctlLog = () => {
+		try {
+			return readFileSync(join(root, 'systemctl.log'), 'utf8')
+		} catch {
+			return ''
+		}
+	}
 
 	const writeEnv = (unit: string, hook = hookPath()) => {
 		mkdirSync(join(vmHome, unit), { recursive: true })
@@ -133,13 +154,16 @@ describe('runner/install.sh (IT-1496)', { timeout: 30_000 }, () => {
 				STUB_VM_HOME: vmHome,
 				STUB_UNITS: units.join(' '),
 				GG_RUNNER_PLAYWRIGHT_DIR: pwDir,
+				GG_RUNNER_SYSTEMD_DIR: join(root, 'systemd'),
+				STUB_SYSTEMCTL_LOG: join(root, 'systemctl.log'),
+				STUB_DROPIN: fstrimDropIn(),
 				...env,
 			},
 		})
 		return { status: result.status, out: result.stdout, err: result.stderr }
 	}
 
-	it('installs all four scripts byte-identically with mode 755, then reports the runners', () => {
+	it('installs the four scripts (755) and the fstrim drop-in (644) byte-identically, then reports the runners', () => {
 		const r = run()
 		expect(r.err).toBe('')
 		expect(r.status).toBe(0)
@@ -154,6 +178,11 @@ describe('runner/install.sh (IT-1496)', { timeout: 30_000 }, () => {
 		}
 		expect(r.out).toContain(`telepítve: ~/runner-hooks/disk-guard.sh (előtte: hiányzik;`)
 		expect(r.out).toContain(`telepítve: ${pwInstaller()}`)
+		// IT-2105: a napi fstrim drop-in 644-es móddal, utána daemon-reload + timer-újraindítás
+		expect(readFileSync(fstrimDropIn())).toEqual(readFileSync(join(runnerDir, 'fstrim-timer-daily.conf')))
+		expect(statSync(fstrimDropIn()).mode & 0o777).toBe(0o644)
+		expect(systemctlLog()).toBe('daemon-reload\nrestart fstrim.timer\n')
+		expect(r.out).toContain('fstrim.timer: daemon-reload és újraindítás megtörtént')
 		expect(r.out.match(/ {2}rendben: /g)).toHaveLength(2)
 		expect(r.out).toContain('a VM playwright-modulja: nincs telepítve')
 		expect(r.out).toContain('EREDMÉNY: a VM a repóval egyezik.')
@@ -166,9 +195,26 @@ describe('runner/install.sh (IT-1496)', { timeout: 30_000 }, () => {
 			const r = run(args)
 			expect(r.status).toBe(0)
 			expect(r.out).not.toMatch(/^telepítve:/m)
-			expect(r.out.match(/^változatlan: /gm)).toHaveLength(4)
+			expect(r.out.match(/^változatlan: /gm)).toHaveLength(5)
 		}
+		// a változatlan drop-in nem indítja újra a timert
+		expect(systemctlLog()).toBe('daemon-reload\nrestart fstrim.timer\n')
 		expect(statSync(hookPath()).mtimeMs).toBe(before)
+	})
+
+	it('IT-2105: a failed reload is retried on the next run, and --check reports it until then', () => {
+		const failed = run([], { STUB_RELOAD_FAIL: '1' })
+		expect(failed.status).not.toBe(0)
+		// a fájl már a helyén van, de a systemd nem töltötte be
+		expect(readFileSync(fstrimDropIn())).toEqual(readFileSync(join(runnerDir, 'fstrim-timer-daily.conf')))
+		const check = run(['--check'])
+		expect(check.status).toBe(1)
+		expect(check.err).toContain('ELTÉR: fstrim.timer — betöltve: nem')
+		const retry = run()
+		expect(retry.status).toBe(0)
+		expect(retry.out).toMatch(/^változatlan: .*gg-daily\.conf/m)
+		expect(retry.out).toContain('fstrim.timer: daemon-reload és újraindítás megtörtént')
+		expect(run(['--check']).status).toBe(0)
 	})
 
 	it('--check reports a drifted file and a wrong mode without writing', () => {
