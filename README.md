@@ -277,8 +277,9 @@ Colima VM, profile `ci`, on the `gg-mb` host. The VM's operations scripts live i
 | file | installed in the VM as | what it does |
 |---|---|---|
 | `runner/disk-guard.sh` | `~/runner-hooks/disk-guard.sh` | `ACTIONS_RUNNER_HOOK_JOB_COMPLETED` hook of every instance (IT-762, IT-1494). Prunes stale `_work` checkouts on the work disk, and on the 19 GB root disk, below 4 GB free, in steps: `/tmp` leftovers, least-recently-used Playwright browsers, `~/.npm/_cacache`. The root-disk steps are skipped while another job's `Runner.Worker` runs. Never fails the job; reports free space in the job log and events in `~/runner-hooks/disk-guard-events.log`. |
+| `runner/disk-guard-volumes.sh` | `~/runner-hooks/disk-guard-volumes.sh` | Asynchronous helper the hook starts when the work disk has less than 15 GB free (IT-1732). Waits until no `Runner.Worker` runs, pauses the `Runner.Listener`s, then prunes in steps, re-measuring after each: anonymous unused volumes; Docker build cache unused for 24 h (`DISK_GUARD_BUILD_CACHE_KEEP_HOURS`); below 10 GB (`DISK_GUARD_BUILD_CACHE_FULL_UNDER_GB`) all unused build cache. Never touches images or checkouts; events go to `~/runner-hooks/disk-guard-events.log`. |
 | `runner/playwright-install.sh` | `/opt/gg-playwright/telepit.sh` | Installs one pinned Playwright module plus its Chromium for the DOM measurements (IT-945); run by hand in the VM (`/opt/gg-playwright/telepit.sh <version>`) when no runner is busy. |
-| `runner/install.sh` | — (runs on the host) | Deploys the two scripts and verifies the result. |
+| `runner/install.sh` | — (runs on the host) | Deploys the scripts and verifies the result. |
 
 ```bash
 runner/install.sh           # deploy what differs, then verify

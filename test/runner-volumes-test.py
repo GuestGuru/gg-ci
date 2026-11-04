@@ -28,13 +28,21 @@ class VolumeGuardTest(unittest.TestCase):
           *Listener*) cat "$STATE/listeners"; [ -s "$STATE/listeners" ] ;;
           *) exit 2;;
         esac''')
-        self.stub('df', 'echo "Avail"; echo "${FREE_MB:-7000}M"')
+        # A szabad hely a $STATE/free fájlból jön, ha van (egy lépcső „felszabadíthat”).
+        self.stub('df', 'echo "Avail"; echo "$(cat "$STATE/free" 2>/dev/null || echo "${FREE_MB:-7000}")M"')
         self.stub('docker', '''echo "$*" >> "$STATE/docker-calls"
-          [ "$*" = "volume prune --force" ] || exit 91
+          case "$*" in
+            "volume prune --force") ;;
+            "builder prune --force --all --filter until=24h") ;;
+            "builder prune --force --all") ;;
+            *) exit 91 ;;
+          esac
           state=$(ps -o stat= -p "$(cat "$STATE/listeners")")
           case "$state" in *T*) ;; *) exit 92;; esac
           [ ! -s "$STATE/workers" ] || exit 93
           echo "Total reclaimed space: 14GB"
+          case "$*" in volume*) [ -z "${FREE_AFTER_VOLUMES:-}" ] || echo "$FREE_AFTER_VOLUMES" > "$STATE/free" ;; esac
+          case "$*" in builder*) exit "${BUILDER_EXIT:-0}" ;; esac
           exit "${DOCKER_EXIT:-0}"
         ''')
 
@@ -66,11 +74,45 @@ class VolumeGuardTest(unittest.TestCase):
         self.listener.wait(timeout=3)
         self.tmp.cleanup()
 
-    def test_prunes_only_volumes_and_resumes_listener(self):
+    def calls(self):
+        return (self.root / 'docker-calls').read_text().splitlines()
+
+    def test_prunes_volumes_then_build_cache_and_resumes_listener(self):
+        # 7 GB szabad: a 15 GB-os és a 10 GB-os küszöb alatt is — mindhárom lépcső.
         events = self.run_guard()
-        self.assertEqual((self.root / 'docker-calls').read_text(), 'volume prune --force\n')
+        self.assertEqual(self.calls(), [
+            'volume prune --force',
+            'builder prune --force --all --filter until=24h',
+            'builder prune --force --all',
+        ])
         self.assertIn('volume_prune', events)
+        self.assertIn('build_cache_prune ', events)
+        self.assertIn('build_cache_prune_all', events)
         self.assertIn('14GB', events)
+        self.assert_resumed()
+
+    def test_full_build_cache_prune_only_under_full_limit(self):
+        # 12 GB szabad: a 15 GB alatt, de a 10 GB fölött — a friss cache marad.
+        self.run_guard(FREE_MB='12000')
+        self.assertEqual(self.calls(), [
+            'volume prune --force',
+            'builder prune --force --all --filter until=24h',
+        ])
+        self.assert_resumed()
+
+    def test_stops_when_volumes_freed_enough(self):
+        self.run_guard(FREE_AFTER_VOLUMES='20000')
+        self.assertEqual(self.calls(), ['volume prune --force'])
+        self.assert_resumed()
+
+    def test_build_cache_keep_hours_override(self):
+        self.stub('docker', '''echo "$*" >> "$STATE/docker-calls"''')
+        self.run_guard(FREE_MB='12000', DISK_GUARD_BUILD_CACHE_KEEP_HOURS='72')
+        self.assertIn('builder prune --force --all --filter until=72h', self.calls())
+
+    def test_build_cache_failure_is_logged_and_listener_resumed(self):
+        events = self.run_guard(BUILDER_EXIT='1')
+        self.assertIn('build_cache_prune_failed', events)
         self.assert_resumed()
 
     def test_busy_worker_skips_everything_including_listener_pause(self):
