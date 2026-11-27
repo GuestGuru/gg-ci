@@ -17,10 +17,10 @@
 # végigviszi, és a végén 1-gyel lép ki.
 #
 # A lista ötödik, elhagyható oszlopa a feltétel (IT-2165). `changed`: a sor kimarad, ha a
-# workflow legutóbbi befejezett futása az ág mostani fején sikeres. Elindul tehát, ha a kód
-# változott az utolsó zöld futás óta, ha a fejen még nem volt befejezett futás, vagy ha a
-# legutóbbi nem sikeres (akkor is, ha ugyanazon a commiton korábban volt zöld). Változatlan,
-# zöld kódon a futás csak ugyanazt bizonyítaná újra. Kihagyni csak pozitív bizonyítékra szabad:
+# workflow legutóbb indult kísérlete az ág mostani fején befejeződött, és sikeres. Elindul tehát,
+# ha a kód változott az utolsó zöld futás óta, ha a fejen még nem volt futás, vagy ha a legutóbbi
+# kísérlet nem sikeres vagy még tart (akkor is, ha ugyanazon a commiton korábban volt zöld).
+# Változatlan, zöld kódon a futás csak ugyanazt bizonyítaná újra. Kihagyni csak pozitív bizonyítékra szabad:
 # ha az ellenőrzés hibázik, időtúllép, mást ad, mint amit várunk, vagy az ág feje közben
 # elmozdul, a sor elindul. Egy fölös futás olcsóbb, mint egy csendben kimaradó tesztsor. Üres
 # feltétellel a sor minden alkalommal indul. A feltételhez a ref ágnév legyen.
@@ -52,14 +52,19 @@ run_now="${GG_DISPATCH_RUN_NOW:-$script_dir/run-now}"
 log() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 
 # bounded <mp> <parancs…>: a parancs időkerettel. A keret lejártakor SIGTERM-et, 5 mp múlva
-# SIGKILL-t küld neki, megvárja, és 142-vel tér vissza; egyébként a parancs kilépési kódját adja.
+# SIGKILL-t küld neki, megvárja, és 142-vel tér vissza; egyébként a parancs kilépési kódját adja
+# (a parancs saját 142-es kódját 1-re írja át, hogy a 142 mindig a keret lejártát jelentse).
 # A korábbi `perl -e 'alarm shift; exec @ARGV'` a gh-t NEM állította le: a Go futtatókörnyezet a
-# SIGALRM-ot elkapja, és nem lép ki rá (mérve 2026-11-27: a gh 1 mp-es kerettel 6 mp-ig élt).
+# SIGALRM-ot elkapja, és nem lép ki rá (mérve 2026-11-27: a gh 1 mp-es kerettel 8 mp-ig élt).
 # Ezért a keretet egy szülőfolyamat őrzi, és olyan jelet küld, amelyre a gh leáll.
+# A zár (9-es leíró) nem öröklődik: a perl és a gh nélküle indul. Parancshelyettesítésben a hívó
+# `$(exec 9>&-; bounded …)` alakot használ, hogy a köztes alshell se tartsa a zárat, ha az indítót
+# egy hívás közben leállítják.
 bounded() {
   perl -e '
     use strict; use warnings; use POSIX ();
     my $limit = shift @ARGV;
+    if ($limit !~ /^[1-9][0-9]*$/) { print STDERR "bounded: érvénytelen keret: $limit\n"; exit 125 }
     my $pid = fork();
     if (!defined $pid) { print STDERR "bounded: fork: $!\n"; exit 126 }
     if ($pid == 0) {
@@ -74,8 +79,9 @@ bounded() {
     my $status = $?;
     alarm 0;
     exit 142 if $expired;
-    exit(($status & 127) ? 128 + ($status & 127) : $status >> 8);
-  ' "$@"
+    my $code = ($status & 127) ? 128 + ($status & 127) : $status >> 8;
+    exit($code == 142 ? 1 : $code);
+  ' "$@" 9>&-
 }
 
 # Az ág fejének SHA-ja a `head_sha` változóba. 0, ha érvényes commit-SHA jött; a változót csak
@@ -83,41 +89,62 @@ bounded() {
 head_sha=""
 read_head() {
   local full="$1" ref="$2" sha
-  sha="$(bounded "$call_max" "$gh_bin" api "repos/$full/git/ref/heads/$ref" --jq .object.sha 9>&-)" || return 1
+  sha="$(exec 9>&-; bounded "$call_max" "$gh_bin" api "repos/$full/git/ref/heads/$ref" --jq .object.sha)" || return 1
   [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || return 1
   head_sha="$sha"
 }
 
-# A `changed` feltétel: sikeres-e a workflow legutóbbi befejezett futása az ág mostani fején?
-#   0 = igen (a sor kimarad),
-#   1 = nem: a legutóbbi befejezett futás nem sikeres, vagy a fejen még nem volt (indítani kell),
+# A futáslista szűrője: a fejre és az ágra szűrt futások közül a legutóbb INDULT kísérletet adja
+# "<sha> <ág> <állapot> <eredmény>" alakban. Egy újrafuttatás a futás `run_started_at` mezőjét
+# frissíti, ezért nem a legutóbb létrehozott rekord számít. Ha a válasz nem egyértelmű, a szűrő
+# ezt mondja meg, és a sor elindul:
+#   none       a fejen ezen az ágon még nem volt futás;
+#   truncated  a lista nem teljes (több futás van, mint amennyi egy lapra fér), vagy nincs darabszám;
+#   ambiguous  a legutóbbi indulás ideje hiányzik, vagy több futás indult ugyanabban a másodpercben.
+# shellcheck disable=SC2016  # a `$` itt a jq változóit jelöli, nem a shellét
+latest_attempt='
+  .workflow_runs as $runs
+  | if (.total_count | type) != "number" or (($runs | type) != "array") or .total_count != ($runs | length)
+    then "truncated"
+    elif ($runs | length) == 0 then "none"
+    else ($runs | map(.run_started_at) | max) as $started
+      | ($runs | map(select(.run_started_at == $started))) as $latest
+      | if $started == null or ($latest | length) != 1 then "ambiguous"
+        else $latest[0] | "\(.head_sha) \(.head_branch) \(.status) \(.conclusion)"
+        end
+    end'
+
+# A `changed` feltétel: sikeres-e a workflow legutóbb indult kísérlete az ág mostani fején?
+#   0 = igen, és be is fejeződött (a sor kimarad),
+#   1 = nem: a fejen még nem volt futás, a legutóbbi kísérlet nem sikeres, vagy még tart (indítani kell),
 #   2 = nem állapítható meg (indítani kell, figyelmeztetéssel),
 #   3 = zöld volt, de az ág feje az ellenőrzés közben elmozdult vagy nem olvasható újra (indítani kell).
 # Csak pozitív bizonyítékra hagy ki: a válasznak pontosan a fej SHA-ját, az ágat, a `completed`
-# állapotot és a `success` eredményt kell tartalmaznia. A lekérdezés a fejre, az ágra és a
-# befejezett futásokra szűr (a folyamatban lévő nem bizonyíték), a `max_by(.run_started_at)` pedig
-# a legutóbb indult kísérletet választja: egy régebbi futás újrafuttatása is ide számít, mert az
-# a futás `run_started_at` mezőjét frissíti. A fej SHA-ja a `head_sha` változóban marad.
-# Minden hívás csak olvas, és időkeretet kap, hogy egy beragadt API ne tartsa fel a többi sort.
+# állapotot és a `success` eredményt kell tartalmaznia. A még tartó kísérlet nem bizonyíték, és
+# nem is takarhat el semmit: ha épp egy bukott futást futtatnak újra, a sor elindul. A fej SHA-ja
+# a `head_sha` változóban marad. Minden hívás csak olvas, és időkeretet kap.
 green_on_head() {
-  local full="$1" workflow="$2" ref="$3" latest first want
+  local full="$1" workflow="$2" ref="$3" latest first at
   read_head "$full" "$ref" || return 2
   first="$head_sha"
-  latest="$(bounded "$call_max" "$gh_bin" api \
-    "repos/$full/actions/workflows/$workflow/runs?head_sha=$first&branch=$ref&status=completed&per_page=100" \
-    --jq '.workflow_runs | max_by(.run_started_at) | "\(.head_sha) \(.head_branch) \(.status) \(.conclusion)"' 9>&-)" || return 2
-  want="$first $ref completed"
+  latest="$(exec 9>&-; bounded "$call_max" "$gh_bin" api \
+    "repos/$full/actions/workflows/$workflow/runs?head_sha=$first&branch=$ref&per_page=100" \
+    --jq "$latest_attempt")" || return 2
+  at="$first $ref"
   case "$latest" in
-    "$want success")
+    "$at completed success")
       # Kihagyás előtt még egyszer kiolvassuk a fejet: ha közben új commit érkezett, a zöld
       # bizonyíték már nem a mostani fejre szól.
       read_head "$full" "$ref" || return 3
       [[ "$head_sha" == "$first" ]] || return 3
       return 0
       ;;
-    "null null null null") return 1 ;;
-    "$want failure" | "$want cancelled" | "$want timed_out" | "$want skipped" | "$want neutral" | \
-      "$want action_required" | "$want stale" | "$want startup_failure") return 1 ;;
+    none) return 1 ;;
+    "$at completed failure" | "$at completed cancelled" | "$at completed timed_out" | \
+      "$at completed skipped" | "$at completed neutral" | "$at completed action_required" | \
+      "$at completed stale" | "$at completed startup_failure") return 1 ;;
+    "$at queued null" | "$at in_progress null" | "$at requested null" | "$at waiting null" | \
+      "$at pending null") return 1 ;;
     *) return 2 ;;
   esac
 }
@@ -147,6 +174,20 @@ if ! perl -MFcntl=:flock -e 'open(my $fh, ">&=", 9) or exit 2; flock($fh, LOCK_E
   log "HIBA: már fut egy indítás ($lock)"
   exit 1
 fi
+
+# A számszerű felülírások ellenőrzése. Érvénytelen érték helyett az alapérték érvényes: egy
+# elgépelt keret se a határidőt kapcsolja ki (a nulla vagy nem szám `alarm` nem jár le), se a
+# ciklust állítsa meg egy aritmetikai hibával.
+checked() { # <változónév> <env-név> <alapérték> <minta>
+  local value="${!1}"
+  if [[ ! "$value" =~ $4 ]]; then
+    log "figyelmeztetés: érvénytelen $2 ($value), az alapérték ($3) érvényes"
+    printf -v "$1" '%s' "$3"
+  fi
+}
+checked wait_max GG_DISPATCH_WAIT_SECONDS 5400 '^[1-9][0-9]{0,8}$'
+checked call_max GG_DISPATCH_CALL_SECONDS 60 '^[1-9][0-9]{0,8}$'
+checked poll GG_DISPATCH_POLL_SECONDS 30 '^[0-9]{1,9}$'
 
 # A lista beolvasása és ellenőrzése egy menetben, még az indítások előtt, hogy a hibás sor
 # egyszer és hangosan jelenjen meg, ne csendben maradjon ki. Tabok mentén darabolunk, az üres
@@ -228,7 +269,7 @@ for freq in $want; do
     # A gh (nem terminálon) a létrehozott futás URL-jét írja ki: ezt és csak ezt követjük.
     # Az indítás is időkeretet kap: egy beragadt hívás a zárat tartva minden további sort
     # feltartana. Időtúllépés után nem próbáljuk újra, mert a futás ettől még létrejöhetett.
-    out="$(bounded "$call_max" "$gh_bin" workflow run "$workflow" -R "$full" --ref "$ref" 9>&-)"
+    out="$(exec 9>&-; bounded "$call_max" "$gh_bin" workflow run "$workflow" -R "$full" --ref "$ref")"
     rc=$?
     if [[ "$rc" -eq 142 ]]; then
       log "HIBA: az indítás $call_max mp alatt nem válaszolt (a futás ettől még létrejöhetett), továbblépek: $full $workflow@$ref"
@@ -260,13 +301,13 @@ for freq in $want; do
     while :; do
       left=$((deadline - SECONDS))
       [[ "$left" -gt 0 ]] || { rc=142; break; }
-      bounded "$left" "$gh_bin" run watch "$id" -R "$full" --exit-status --interval "$poll" > /dev/null 9>&-
+      bounded "$left" "$gh_bin" run watch "$id" -R "$full" --exit-status --interval "$poll" > /dev/null
       rc=$?
       [[ "$rc" -eq 0 || "$rc" -eq 142 ]] && break
       left=$((deadline - SECONDS))
       [[ "$left" -gt 0 ]] || { rc=142; break; }
-      state="$(bounded "$left" "$gh_bin" run view "$id" -R "$full" --json status,conclusion \
-        --jq '"\(.status) \(.conclusion)"' 9>&- 2> /dev/null)"
+      state="$(exec 9>&-; bounded "$left" "$gh_bin" run view "$id" -R "$full" --json status,conclusion \
+        --jq '"\(.status) \(.conclusion)"' 2> /dev/null)"
       if [[ "${state%% *}" == completed ]]; then
         [[ "${state#* }" == success ]] && rc=0
         break

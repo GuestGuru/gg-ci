@@ -12,24 +12,30 @@
 #                         RUNS_FAIL: a hívás hibázik. RUNS_RAW: a szűrő helyett ezt írja ki.
 #                         RUNS_EXIT: a válasz kiírása után ezzel a kóddal lép ki.
 # HEAD_SLEEP, RUNS_SLEEP, WATCH_SLEEP, VIEW_SLEEP: a megfelelő hívás lóg; RUN_SLEEP_FIRST: az első
-# indítás lóg.
+# indítás lóg. HANG_IGNORE_TERM: a lógó hívás a SIGTERM-et is figyelmen kívül hagyja.
 #
 # `workflow run`: a futás URL-jét írja ki (mint a valódi, nem terminálon), az azonosító 1000 + az
-# indítás sorszáma; a FAIL_REPO-ra hibázik, a NOURL_REPO-ra URL nélkül sikeres. `run watch`: a
+# indítás sorszáma; a FAIL_REPO-ra hibázik (RUN_EXIT kóddal, alapból 1), a NOURL_REPO-ra URL nélkül
+# sikeres. `run watch`: a
 # WATCH_FAIL azonosítóra 1-gyel lép ki, WATCH_FLAKY mellett az első hívása hibázik. `run view`: a
 # VIEW_STATE-et adja.
 set -uo pipefail
 
-printf '%s\n' "$*" >> "$GH_CALLS"
-{
-  printf '[%s]' "$@"
-  printf '\n'
-} >> "$GH_ARGV"
+# Egy hívás egy naplósor marad akkor is, ha egy argumentum (a jq-program) több soros.
+nl=$'\n'
+joined="$*"
+printf '%s\n' "${joined//"$nl"/ }" >> "$GH_CALLS"
+bracketed=""
+for arg in "$@"; do
+  bracketed+="[${arg//"$nl"/ }]"
+done
+printf '%s\n' "$bracketed" >> "$GH_ARGV"
 
 # A valódi gh (Go) a SIGALRM-ot elkapja, és nem lép ki rá. A lógó hívás itt is így viselkedik,
 # különben a teszt olyan időkeretet is elfogadna, amely a valódi gh-t nem állítja le.
 hang() {
   trap '' ALRM
+  if [[ -n "${HANG_IGNORE_TERM:-}" ]]; then trap '' TERM; fi
   exec sleep "$1"
 }
 
@@ -88,7 +94,7 @@ case "$1 ${2:-}" in
     if [[ -n "${RUN_SLEEP_FIRST:-}" && "$(grep -c '^workflow run' "$GH_CALLS")" == 1 ]]; then
       hang "$RUN_SLEEP_FIRST"
     fi
-    [[ "$*" == *"${FAIL_REPO:-nothing}"* ]] && exit 1
+    [[ "$*" == *"${FAIL_REPO:-nothing}"* ]] && exit "${RUN_EXIT:-1}"
     [[ "$*" == *"${NOURL_REPO:-nothing}"* ]] && exit 0
     echo "https://github.com/$5/actions/runs/$((1000 + $(grep -c '^workflow run' "$GH_CALLS")))"
     ;;

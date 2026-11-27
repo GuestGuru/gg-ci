@@ -267,15 +267,14 @@ describe.runIf(hasJq || process.env.CI)('scheduled-dispatch: dispatch.sh', { tim
 	const moved =
 		'az ág feje az ellenőrzés közben elmozdult vagy nem olvasható újra, ezért elindul: GuestGuru/a x.yml@main'
 
-	it('skips a changed row when the latest completed run on the head of the branch succeeded', () => {
+	it('skips a changed row when the latest attempt on the head of the branch is a completed success', () => {
 		conditionalList()
-		// A fejen a legutóbbi BEFEJEZETT futás zöld. Minden más rekord olyan, amelyet valamelyik szűrő
-		// kizár: ha a lekérdezésből kimaradna a befejezettség, a commit, az ág vagy a workflow szűrője,
-		// egy újabb, nem zöld rekord kerülne előre, és a sor (hibásan) elindulna.
+		// A fejen a legutóbb indult kísérlet zöld. Minden más rekord olyan, amelyet valamelyik szűrő
+		// kizár: ha a lekérdezésből kimaradna a commit, az ág vagy a workflow szűrője, egy újabb, nem
+		// zöld rekord kerülne előre, és a sor (hibásan) elindulna.
 		fixtures([
 			record(day(20), 'failure'),
 			record(day(21), 'success'),
-			record(day(22), null),
 			record(day(23), 'failure', { head_sha: otherSha }),
 			record(day(24), 'failure', { head_branch: 'feature' }),
 			record(day(25), 'failure', { path: '.github/workflows/other.yml' }),
@@ -284,11 +283,12 @@ describe.runIf(hasJq || process.env.CI)('scheduled-dispatch: dispatch.sh', { tim
 		const result = run(['nightly'], {})
 		expect(result.status, result.stdout + result.stderr).toBe(0)
 		// Pontosan ez a három olvasó hívás megy ki, és csak a feltételes sorra: az ág feje, a
-		// workflow befejezett futásai ezen a commiton és ágon, majd kihagyás előtt újra a fej.
+		// workflow futásai ezen a commiton és ágon, majd kihagyás előtt újra a fej. A jq-program
+		// szövegét nem rögzítjük: a stub valódi jq-val futtatja, a döntést a rekordok adják.
 		const head = '[api][repos/GuestGuru/a/git/ref/heads/main][--jq][.object.sha]'
-		expect(argv('[api]')).toEqual([
+		expect(argv('[api]').map((line) => line.replace(/\[--jq\]\[ .*$/, '[--jq][…]'))).toEqual([
 			head,
-			`[api][repos/GuestGuru/a/actions/workflows/x.yml/runs?head_sha=${headSha}&branch=main&status=completed&per_page=100][--jq][.workflow_runs | max_by(.run_started_at) | "\\(.head_sha) \\(.head_branch) \\(.status) \\(.conclusion)"]`,
+			`[api][repos/GuestGuru/a/actions/workflows/x.yml/runs?head_sha=${headSha}&branch=main&per_page=100][--jq][…]`,
 			head,
 		])
 		expect(dispatchedWorkflows()).toEqual(['y.yml'])
@@ -298,7 +298,6 @@ describe.runIf(hasJq || process.env.CI)('scheduled-dispatch: dispatch.sh', { tim
 
 	it.each([
 		['a failed run was followed by a green one', [record(day(20), 'failure'), record(day(21), 'success')]],
-		['a newer run is still in progress', [record(day(20), 'success'), record(day(21), null)]],
 		[
 			'an older failed run was re-run later and went green',
 			[record(day(20), 'success', { run_started_at: day(26), run_attempt: 2 }), record(day(21), 'failure')],
@@ -319,6 +318,14 @@ describe.runIf(hasJq || process.env.CI)('scheduled-dispatch: dispatch.sh', { tim
 		['a green run was followed by a failed one', [record(day(20), 'success'), record(day(21), 'failure')]],
 		['the latest completed run was cancelled', [record(day(20), 'success'), record(day(21), 'cancelled')]],
 		['the only run on the head is still in progress', [record(day(21), null)]],
+		['a newer run is still in progress after a green one', [record(day(20), 'success'), record(day(21), null)]],
+		['the latest run is still queued', [record(day(20), 'success'), record(day(21), null, { status: 'queued' })]],
+		[
+			// A bukott futást épp újrafuttatják: a rekordja már nem mutatja a korábbi bukást, de a még
+			// tartó kísérlet nem zöld bizonyíték, és nem takarhatja el a régebbi zöld futás.
+			'a failed run is being re-run while an older run is green',
+			[record(day(20), 'success'), record(day(21), null, { run_started_at: day(26), run_attempt: 2 })],
+		],
 		[
 			'an older green run was re-run later and failed, although a newer run is green',
 			[record(day(20), 'failure', { run_started_at: day(26), run_attempt: 2 }), record(day(21), 'success')],
@@ -372,10 +379,35 @@ describe.runIf(hasJq || process.env.CI)('scheduled-dispatch: dispatch.sh', { tim
 		['the conclusion is missing', {}, { RUNS_RAW: `${headSha} main completed ` }],
 		['the conclusion is unknown', {}, { RUNS_RAW: `${headSha} main completed weird` }],
 		['the answer is a count instead of a run', {}, { RUNS_RAW: '3' }],
+		['the history is reported as truncated', {}, { RUNS_RAW: 'truncated' }],
+		['the latest attempt is reported as ambiguous', {}, { RUNS_RAW: 'ambiguous' }],
+		['the status is unknown', {}, { RUNS_RAW: `${headSha} main sleeping null` }],
 	])('dispatches a changed row with a warning when %s', (_name, state, extra) => {
 		conditionalList()
 		fixtures([record(day(21), 'success')], (state as { heads?: string[] }).heads)
 		const result = run(['nightly'], extra)
+		expect(dispatchedWorkflows()).toEqual(['x.yml', 'y.yml'])
+		expect(result.status, result.stdout + result.stderr).toBe(0)
+		expect(result.stdout).toContain(undetermined)
+		expect(result.stdout).not.toContain('kihagyva')
+	})
+
+	// Ha a futások listájából nem derül ki egyértelműen a legutóbbi kísérlet, az indító nem
+	// találgat: a sor figyelmeztetéssel elindul. A válaszok itt a valódi szűrőből jönnek.
+	it.each([
+		[
+			'the history does not fit on one page',
+			Array.from({ length: 101 }, (_, i) => record(`2026-10-01T00:${String(Math.floor(i / 60)).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}Z`, 'success')),
+		],
+		[
+			'two attempts started in the same second',
+			[record(day(21), 'success'), record(day(21), 'failure')],
+		],
+		['the latest start time is missing', [record(day(21), 'success', { run_started_at: null })]],
+	])('dispatches a changed row with a warning when %s', (_name, runs) => {
+		conditionalList()
+		fixtures(runs)
+		const result = run(['nightly'], {})
 		expect(dispatchedWorkflows()).toEqual(['x.yml', 'y.yml'])
 		expect(result.status, result.stdout + result.stderr).toBe(0)
 		expect(result.stdout).toContain(undetermined)
@@ -410,6 +442,57 @@ describe.runIf(hasJq || process.env.CI)('scheduled-dispatch: dispatch.sh', { tim
 		// a lógó indítás futását nem figyeljük (nincs URL-je), a következő sorét igen
 		expect(calls('run watch')).toHaveLength(1)
 		expect(result.stdout).toContain('kész: success')
+	})
+
+	it('kills a hanging lookup that ignores SIGTERM as well, and goes on', () => {
+		conditionalList()
+		fixtures([record(day(21), 'success')])
+		const result = run(['nightly'], { GG_DISPATCH_CALL_SECONDS: '2', HEAD_SLEEP: '300', HANG_IGNORE_TERM: '1' })
+		expect(result.status, result.stdout + result.stderr).toBe(0)
+		expect(dispatchedWorkflows()).toEqual(['x.yml', 'y.yml'])
+		expect(result.stdout).toContain(undetermined)
+	})
+
+	it('does not mistake a command that exits 142 by itself for an expired deadline', () => {
+		const result = run(['nightly'], { FAIL_REPO: 'GuestGuru/a', RUN_EXIT: '142' })
+		expect(result.status).toBe(1)
+		expect(result.stdout).toContain('HIBA: nem indult: GuestGuru/a x.yml@main')
+		expect(result.stdout).not.toContain('nem válaszolt')
+		expect(dispatchedWorkflows()).toEqual(['x.yml', 'y.yml'])
+	})
+
+	// Egy elgépelt keret nem kapcsolhatja ki a határidőt (a nulla vagy nem szám `alarm` nem jár le),
+	// és nem állíthatja meg a ciklust aritmetikai hibával: az alapérték lép a helyére.
+	it.each([
+		['GG_DISPATCH_CALL_SECONDS', '0', '60'],
+		['GG_DISPATCH_CALL_SECONDS', 'abc', '60'],
+		['GG_DISPATCH_WAIT_SECONDS', '-5', '5400'],
+		['GG_DISPATCH_WAIT_SECONDS', '1e3', '5400'],
+		['GG_DISPATCH_POLL_SECONDS', 'soon', '30'],
+	])('falls back to the default when %s is %s', (name, value, fallback) => {
+		const result = run(['nightly'], { [name]: value })
+		expect(result.status, result.stdout + result.stderr).toBe(0)
+		expect(result.stdout).toContain(`figyelmeztetés: érvénytelen ${name} (${value}), az alapérték (${fallback}) érvényes`)
+		expect(dispatchedWorkflows()).toEqual(['x.yml', 'y.yml'])
+		expect(result.stderr).toBe('')
+	})
+
+	// Ha az indítót egy felügyelt hívás közben leállítják, a zárat senki sem tarthatja tovább:
+	// a következő indítás azonnal mehet, akkor is, ha a félbemaradt hívás még él.
+	it('releases the lock when the dispatcher is killed during a supervised call', async () => {
+		conditionalList()
+		const first = spawn('bash', [dispatch, 'nightly'], {
+			env: env({ HEAD_SLEEP: '15', GG_DISPATCH_CALL_SECONDS: '10' }),
+			stdio: 'ignore',
+		})
+		// megvárjuk, amíg a fej lekérdezése elindul (a hívás megjelenik a naplóban)
+		for (let i = 0; i < 200 && calls('api').length === 0; i++) await new Promise((resolve) => setTimeout(resolve, 50))
+		expect(calls('api')).toHaveLength(1)
+		first.kill('SIGKILL')
+		await new Promise((resolve) => first.once('exit', resolve))
+		const second = run(['nightly'], {})
+		expect(second.stdout).not.toContain('már fut')
+		expect(second.status, second.stdout + second.stderr).toBe(0)
 	})
 
 	it('reports an unknown condition, still dispatches the row and exits non-zero', () => {
