@@ -315,30 +315,37 @@ down, that night is skipped.
 - **Only after a change (IT-2165):** a row whose fifth column is `changed` is skipped when the
   latest completed run of its workflow on the current head of the branch succeeded. So a suite
   runs again after new commits, on a head that has no completed run yet, and whenever the latest
-  completed run on the head is not a success, even if an earlier run on the same commit was
+  completed attempt on the head is not a success, even if an earlier run on the same commit was
   green: a red suite keeps running on its schedule until it is green. Unchanged green code is
   not tested again. A skipped row is logged (`kihagyva, a fej legutóbbi futása sikeres: …`), and
   no workflow run is created. Rows without a condition are dispatched every time.
-  - The check is two read-only API calls per row, each limited to `GG_DISPATCH_CALL_SECONDS`
-    (60): `git/ref/heads/<ref>` for the head, then the workflow's runs filtered by `head_sha`,
-    `branch` and `status=completed` with `per_page=1`. Runs are listed newest first, so that one
-    element is the latest completed run; a run in progress does not count, and neither does a
-    run dispatched on another branch.
-  - It only skips on positive evidence: the answer must be exactly the head SHA with the
-    conclusion `success`. It fails open: if a call errors, times out or returns anything else,
-    the row is dispatched with a warning, because an extra run is cheaper than a suite that
-    silently never runs. An unknown condition is reported as an error and the row is dispatched
-    as well.
+  - The check reads the head of the branch (`git/ref/heads/<ref>`), then the workflow's runs
+    filtered by `head_sha`, `branch` and `status=completed`, and takes the one whose
+    `run_started_at` is the latest. A re-run updates `run_started_at` of its run, so the latest
+    attempt decides, not the run that was created last. A run in progress is not evidence, and
+    neither is a run on another branch.
+  - It skips only on positive evidence: the answer must be exactly the head SHA, the branch,
+    `completed` and `success`, and the head must still be the same commit when it is read again
+    just before the skip. Otherwise the row is dispatched: quietly when the head has no completed
+    run or the latest attempt has a known non-success conclusion, with a notice when the branch
+    moved during the check, and with a warning when a call errors, times out or returns anything
+    else. An extra run is cheaper than a suite that silently never runs.
   - The ref of a `changed` row must be a branch name. The whole workflow run is the evidence,
     so do not use `changed` for a workflow whose manual runs can be narrowed with inputs, or
     whose run can succeed without running the tests.
-  - A commit that lands on the branch between the two calls and the skip is picked up by the
-    next scheduled run; the dispatcher does not re-check the head.
+- **A malformed row** (fewer than four or more than five fields, an empty repo, workflow or ref,
+  an unknown frequency) cannot be dispatched: it is logged once as an error, the other rows run,
+  and the script exits 1. Empty fields are kept, so a missing value cannot shift the columns.
+  An unknown condition is an error too, but that row is dispatched unconditionally. The list on
+  `main` is also checked by the test suite.
+- **Deadlines:** every `gh` call runs under a supervising process (`bounded` in `dispatch.sh`)
+  that sends SIGTERM at the deadline, SIGKILL five seconds later, and reports 142. The lookups
+  and the dispatch get `GG_DISPATCH_CALL_SECONDS` (60) each. A plain `alarm` before `exec` does
+  not work here: the Go runtime catches SIGALRM and `gh` keeps running (measured 2026-11-27).
 - **One run at a time:** `dispatch.sh` takes the run URL that `gh workflow run` prints and waits
   for exactly that run (`gh run watch --exit-status`, at most `GG_DISPATCH_WAIT_SECONDS`, 90 min)
-  before dispatching the next row. The dispatch call itself is limited to
-  `GG_DISPATCH_CALL_SECONDS`; after a timeout it is not retried, because the run may have been
-  created. A failed dispatch or run does not stop the rest; the script
+  before dispatching the next row. A dispatch call that hits its deadline is not retried,
+  because the run may have been created. A failed dispatch or run does not stop the rest; the script
   exits 1 at the end. A second dispatcher refuses to start while one runs (a `flock` on
   `dispatch.lock`, released with the process, so a crash leaves no stale lock).
 - **01:30 UTC all year:** launchd only knows local time, so the agent fires every hour at :30

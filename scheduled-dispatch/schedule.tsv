@@ -3,8 +3,9 @@
 # gyakoriság: nightly (minden éjjel) | weekly (hétfőn, a nightly sorok után)
 # feltétel (elhagyható, IT-2165): changed = a sor kimarad, ha a workflow legutóbbi befejezett
 #   futása az ág mostani fején sikeres; elindul, ha a kód változott az utolsó zöld futás óta, ha
-#   a fejen még nem volt befejezett futás, vagy ha a legutóbbi nem sikeres. Üresen a sor minden
-#   alkalommal indul. A feltételhez a ref ágnév legyen.
+#   a fejen még nem volt befejezett futás, ha a legutóbbi nem sikeres, vagy ha ez nem állapítható
+#   meg. Üresen a sor minden alkalommal indul. A feltételhez a ref ágnév legyen.
+# A hibás sort (mezőszám, üres mező, ismeretlen gyakoriság) az indító hibaként naplózza és kihagyja.
 # A sorok egymás után futnak: a következő csak az előző futás végén indul.
 gg3-app	e2e-full.yml	main	nightly
 gg-inbox	db-tests.yml	main	nightly	changed
