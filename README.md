@@ -330,8 +330,9 @@ down, that night is skipped.
     just before the skip. Otherwise the row is dispatched: quietly when the head has no run, or
     the latest attempt is still running or has a known non-success conclusion; with a notice when
     the branch moved during the check; and with a warning when a call errors or times out, the run
-    list does not fit on one page, two attempts started in the same second, or the answer is
-    anything else. An extra run is cheaper than a suite that silently never runs.
+    list does not fit on one page, a start time is missing or malformed, two attempts started in
+    the same second, or the answer is anything else. An extra run is cheaper than a suite that
+    silently never runs.
   - The ref of a `changed` row must be a branch name. The whole workflow run is the evidence,
     so do not use `changed` for a workflow whose manual runs can be narrowed with inputs, or
     whose run can succeed without running the tests.
@@ -346,17 +347,21 @@ down, that night is skipped.
   seconds. The lookups and the dispatch get
   `GG_DISPATCH_CALL_SECONDS` (60) each. A plain `alarm` before `exec` does not work here: the Go
   runtime catches SIGALRM and `gh` keeps running (measured 2026-11-27). An override that is not
-  a usable number (`GG_DISPATCH_WAIT_SECONDS`, `GG_DISPATCH_CALL_SECONDS`,
-  `GG_DISPATCH_POLL_SECONDS`) is replaced by the default with a warning, so a typo can neither
-  switch a deadline off nor abort the round.
+  a plain decimal number without a leading zero (`GG_DISPATCH_WAIT_SECONDS`,
+  `GG_DISPATCH_CALL_SECONDS`, `GG_DISPATCH_POLL_SECONDS`) is replaced by the default with a
+  warning, so a typo can neither switch a deadline off nor abort the round.
 - **One run at a time:** `dispatch.sh` takes the run URL that `gh workflow run` prints and waits
   for exactly that run (`gh run watch --exit-status`, at most `GG_DISPATCH_WAIT_SECONDS`, 90 min)
   before dispatching the next row. A dispatch call that hits its deadline is not retried,
-  because the run may have been created. A failed dispatch or run does not stop the rest; the script
-  exits 1 at the end. A second dispatcher refuses to start while one runs (a `flock` on
-  `dispatch.lock`). Only the dispatcher process holds the lock: the supervised `gh` calls and the
-  subshells around them close it, so it is released when the dispatcher exits or is killed, even
-  if a call it started is still running.
+  because the run may have been created. Two workflows can therefore overlap in two cases: the
+  wait hit its limit, or the dispatch returned no run URL; the dispatcher moves on while that
+  run may still be going. A failed dispatch or run does not stop the rest; the script
+  exits 1 at the end. If the loop itself is cut short by a shell error, the script says so
+  (`a kör idő előtt megszakadt`) and exits 1 instead of reporting success. A second dispatcher
+  refuses to start while one runs (a `flock` on `dispatch.lock`). Only the dispatcher process
+  holds the lock: the supervised `gh` calls, the subshells around them and the sleep between two
+  watches close it, so it is released when the dispatcher exits or is killed, even if something
+  it started is still running.
 - **01:30 UTC all year:** launchd only knows local time, so the agent fires every hour at :30
   in `scheduled` mode, and the script proceeds only when the UTC hour is `01`.
 - **The caller workflow** has only a `workflow_dispatch` trigger and

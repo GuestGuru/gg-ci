@@ -208,10 +208,12 @@ describe.runIf(hasJq || process.env.CI)('scheduled-dispatch: dispatch.sh', { tim
 		expect(result.stdout).toContain('3 mp után sem ért véget')
 	})
 
-	it('stops waiting after GG_DISPATCH_WAIT_SECONDS and moves on', () => {
-		const result = run(['weekly'], { WATCH_SLEEP: '300', GG_DISPATCH_WAIT_SECONDS: '2' })
+	it('stops waiting after GG_DISPATCH_WAIT_SECONDS and moves on to the next row', () => {
+		const result = run(['nightly'], { WATCH_SLEEP: '300', GG_DISPATCH_WAIT_SECONDS: '2' })
 		expect(result.status).toBe(1)
-		expect(result.stdout).toContain('2 mp után sem ért véget')
+		// mindkét sor elindult, és mindkettő a saját keretének lejártakor adta fel a várakozást
+		expect(dispatchedWorkflows()).toEqual(['x.yml', 'y.yml'])
+		expect(result.stdout.split('\n').filter((line) => line.includes('2 mp után sem ért véget'))).toHaveLength(2)
 	})
 
 	it('refuses to run while another dispatcher holds the lock', async () => {
@@ -372,16 +374,17 @@ describe.runIf(hasJq || process.env.CI)('scheduled-dispatch: dispatch.sh', { tim
 		['the run lookup fails', {}, { RUNS_FAIL: '1' }],
 		['the run lookup prints a green answer but exits non-zero', {}, { RUNS_EXIT: '1' }],
 		['the run lookup returns nothing', {}, { RUNS_RAW: '' }],
-		['the answer is green for another commit', {}, { RUNS_RAW: `${otherSha} main completed success` }],
-		['the answer is green for another branch', {}, { RUNS_RAW: `${headSha} feature completed success` }],
-		['the answer is green but not completed', {}, { RUNS_RAW: `${headSha} main in_progress success` }],
-		['the conclusion only starts with success', {}, { RUNS_RAW: `${headSha} main completed successful` }],
-		['the conclusion is missing', {}, { RUNS_RAW: `${headSha} main completed ` }],
-		['the conclusion is unknown', {}, { RUNS_RAW: `${headSha} main completed weird` }],
+		['the answer is green for another commit', {}, { RUNS_RAW: `${otherSha} main completed success ;` }],
+		['the answer is green for another branch', {}, { RUNS_RAW: `${headSha} feature completed success ;` }],
+		['the answer is green but not completed', {}, { RUNS_RAW: `${headSha} main in_progress success ;` }],
+		['the conclusion only starts with success', {}, { RUNS_RAW: `${headSha} main completed successful ;` }],
+		['the conclusion is missing', {}, { RUNS_RAW: `${headSha} main completed  ;` }],
+		['the conclusion is unknown', {}, { RUNS_RAW: `${headSha} main completed weird ;` }],
+		['the answer is green but lacks the terminator', {}, { RUNS_RAW: `${headSha} main completed success` }],
 		['the answer is a count instead of a run', {}, { RUNS_RAW: '3' }],
 		['the history is reported as truncated', {}, { RUNS_RAW: 'truncated' }],
 		['the latest attempt is reported as ambiguous', {}, { RUNS_RAW: 'ambiguous' }],
-		['the status is unknown', {}, { RUNS_RAW: `${headSha} main sleeping null` }],
+		['the status is unknown', {}, { RUNS_RAW: `${headSha} main sleeping null ;` }],
 	])('dispatches a changed row with a warning when %s', (_name, state, extra) => {
 		conditionalList()
 		fixtures([record(day(21), 'success')], (state as { heads?: string[] }).heads)
@@ -404,6 +407,19 @@ describe.runIf(hasJq || process.env.CI)('scheduled-dispatch: dispatch.sh', { tim
 			[record(day(21), 'success'), record(day(21), 'failure')],
 		],
 		['the latest start time is missing', [record(day(21), 'success', { run_started_at: null })]],
+		[
+			// a dátum nélküli piros futás nem tűnhet el a dátummal rendelkező zöld mögött
+			'a failed run without a start time stands next to a dated green one',
+			[record(day(21), 'success'), record(day(22), 'failure', { run_started_at: null })],
+		],
+		['a start time is an empty string', [record(day(21), 'success'), record(day(22), 'failure', { run_started_at: '' })]],
+		['the start time of a green run is a number', [record(day(21), 'success', { run_started_at: 1764200000 })]],
+		['the start time is not a UTC timestamp', [record(day(21), 'success', { run_started_at: '2026-11-21 01:30' })]],
+		[
+			// a parancshelyettesítés a kimenet végi sortörést levágná: a lezáró jel miatt ez nem zöld
+			'the conclusion is success followed by a newline',
+			[record(day(21), 'success\n')],
+		],
 	])('dispatches a changed row with a warning when %s', (_name, runs) => {
 		conditionalList()
 		fixtures(runs)
@@ -418,15 +434,18 @@ describe.runIf(hasJq || process.env.CI)('scheduled-dispatch: dispatch.sh', { tim
 	// az indító nem állítaná le, a futtató 60 mp-es saját kerete érne véget, státusz nélkül. A keret
 	// 3 mp, hogy terhelt gépen a rendben lefutó hívások se fussanak ki belőle.
 	it.each([
-		['head lookup', { HEAD_SLEEP: '300' }],
-		['run lookup', { RUNS_SLEEP: '300' }],
-	])('stops a hanging %s after GG_DISPATCH_CALL_SECONDS and dispatches the row', (_name, extra) => {
+		['head lookup', { HEAD_SLEEP: '300' }, 1],
+		['run lookup', { RUNS_SLEEP: '300' }, 2],
+	])('stops a hanging %s after GG_DISPATCH_CALL_SECONDS and dispatches the row', (_name, extra, lookups) => {
 		conditionalList()
 		fixtures([record(day(21), 'success')])
 		const result = run(['nightly'], { GG_DISPATCH_CALL_SECONDS: '3', ...extra })
 		expect(result.status, result.stdout + result.stderr).toBe(0)
 		expect(dispatchedWorkflows()).toEqual(['x.yml', 'y.yml'])
 		expect(result.stdout).toContain(undetermined)
+		// a szándékolt hívásnál állt meg: a fej lekérdezése után nincs több, a futásoké a második
+		expect(calls('api')).toHaveLength(lookups)
+		expect(calls('api')[lookups - 1]).toContain(lookups === 1 ? '/git/ref/heads/main' : '/runs?')
 	})
 
 	it('stops a hanging dispatch after GG_DISPATCH_CALL_SECONDS, does not retry it, and goes on', () => {
@@ -477,6 +496,23 @@ describe.runIf(hasJq || process.env.CI)('scheduled-dispatch: dispatch.sh', { tim
 		expect(result.stderr).toBe('')
 	})
 
+	// A `08` számnak látszik, de a bash aritmetikájában hibás oktális érték, a gh pedig elutasítja
+	// intervallumként. Érvényesítés nélkül a várakozási ágon a ciklus megszakadt, a második sor
+	// kimaradt, és a kör mégis sikeresnek jelentette magát.
+	it('replaces a poll interval with a leading zero and still reaches the next row', () => {
+		const result = run(['nightly'], {
+			GG_DISPATCH_POLL_SECONDS: '08',
+			GG_DISPATCH_WAIT_SECONDS: '3',
+			WATCH_FLAKY: '1',
+			VIEW_STATE: 'in_progress ',
+		})
+		expect(result.stdout).toContain('figyelmeztetés: érvénytelen GG_DISPATCH_POLL_SECONDS (08), az alapérték (30) érvényes')
+		expect(calls('run watch')[0]).toBe('run watch 1001 -R GuestGuru/a --exit-status --interval 30')
+		expect(dispatchedWorkflows()).toEqual(['x.yml', 'y.yml'])
+		expect(result.stdout).not.toContain('megszakadt')
+		expect(result.stderr).toBe('')
+	})
+
 	// Ha az indítót egy felügyelt hívás közben leállítják, a zárat senki sem tarthatja tovább:
 	// a következő indítás azonnal mehet, akkor is, ha a félbemaradt hívás még él.
 	it('releases the lock when the dispatcher is killed during a supervised call', async () => {
@@ -491,6 +527,23 @@ describe.runIf(hasJq || process.env.CI)('scheduled-dispatch: dispatch.sh', { tim
 		first.kill('SIGKILL')
 		await new Promise((resolve) => first.once('exit', resolve))
 		const second = run(['nightly'], {})
+		expect(second.stdout).not.toContain('már fut')
+		expect(second.status, second.stdout + second.stderr).toBe(0)
+	})
+
+	it('releases the lock when the dispatcher is killed while it sleeps between two watches', async () => {
+		// az első watch hibázik, a futás még tart: az indító a következő figyelés előtt alszik
+		const first = spawn('bash', [dispatch, 'nightly'], {
+			env: env({ WATCH_FLAKY: '1', VIEW_STATE: 'in_progress ', GG_DISPATCH_POLL_SECONDS: '10' }),
+			stdio: 'ignore',
+		})
+		for (let i = 0; i < 200 && calls('run view').length === 0; i++) await new Promise((resolve) => setTimeout(resolve, 50))
+		expect(calls('run view')).toHaveLength(1)
+		// a `run view` válasza után jön a napló és az alvás: adunk neki időt, hogy elaludjon
+		await new Promise((resolve) => setTimeout(resolve, 1000))
+		first.kill('SIGKILL')
+		await new Promise((resolve) => first.once('exit', resolve))
+		const second = run(['weekly'], {})
 		expect(second.stdout).not.toContain('már fut')
 		expect(second.status, second.stdout + second.stderr).toBe(0)
 	})

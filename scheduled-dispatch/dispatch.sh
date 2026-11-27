@@ -95,22 +95,27 @@ read_head() {
 }
 
 # A futáslista szűrője: a fejre és az ágra szűrt futások közül a legutóbb INDULT kísérletet adja
-# "<sha> <ág> <állapot> <eredmény>" alakban. Egy újrafuttatás a futás `run_started_at` mezőjét
-# frissíti, ezért nem a legutóbb létrehozott rekord számít. Ha a válasz nem egyértelmű, a szűrő
-# ezt mondja meg, és a sor elindul:
+# "<sha> <ág> <állapot> <eredmény> ;" alakban. Egy újrafuttatás a futás `run_started_at` mezőjét
+# frissíti, ezért nem a legutóbb létrehozott rekord számít. A záró ` ;` miatt az utolsó mező sem
+# végződhet észrevétlenül sortöréssel (a parancshelyettesítés a kimenet végi sortöréseket levágja).
+# Ha a válasz nem egyértelmű, a szűrő ezt mondja meg, és a sor elindul:
 #   none       a fejen ezen az ágon még nem volt futás;
 #   truncated  a lista nem teljes (több futás van, mint amennyi egy lapra fér), vagy nincs darabszám;
-#   ambiguous  a legutóbbi indulás ideje hiányzik, vagy több futás indult ugyanabban a másodpercben.
+#   ambiguous  valamelyik futás indulási ideje hiányzik vagy nem időbélyeg (a sorrend így nem
+#              megbízható), vagy több futás indult ugyanabban a másodpercben.
 # shellcheck disable=SC2016  # a `$` itt a jq változóit jelöli, nem a shellét
 latest_attempt='
   .workflow_runs as $runs
   | if (.total_count | type) != "number" or (($runs | type) != "array") or .total_count != ($runs | length)
     then "truncated"
     elif ($runs | length) == 0 then "none"
+    elif any($runs[]; (.run_started_at | type) != "string"
+        or (.run_started_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$") | not))
+    then "ambiguous"
     else ($runs | map(.run_started_at) | max) as $started
       | ($runs | map(select(.run_started_at == $started))) as $latest
-      | if $started == null or ($latest | length) != 1 then "ambiguous"
-        else $latest[0] | "\(.head_sha) \(.head_branch) \(.status) \(.conclusion)"
+      | if ($latest | length) != 1 then "ambiguous"
+        else $latest[0] | "\(.head_sha) \(.head_branch) \(.status) \(.conclusion) ;"
         end
     end'
 
@@ -132,7 +137,7 @@ green_on_head() {
     --jq "$latest_attempt")" || return 2
   at="$first $ref"
   case "$latest" in
-    "$at completed success")
+    "$at completed success ;")
       # Kihagyás előtt még egyszer kiolvassuk a fejet: ha közben új commit érkezett, a zöld
       # bizonyíték már nem a mostani fejre szól.
       read_head "$full" "$ref" || return 3
@@ -140,11 +145,11 @@ green_on_head() {
       return 0
       ;;
     none) return 1 ;;
-    "$at completed failure" | "$at completed cancelled" | "$at completed timed_out" | \
-      "$at completed skipped" | "$at completed neutral" | "$at completed action_required" | \
-      "$at completed stale" | "$at completed startup_failure") return 1 ;;
-    "$at queued null" | "$at in_progress null" | "$at requested null" | "$at waiting null" | \
-      "$at pending null") return 1 ;;
+    "$at completed failure ;" | "$at completed cancelled ;" | "$at completed timed_out ;" | \
+      "$at completed skipped ;" | "$at completed neutral ;" | "$at completed action_required ;" | \
+      "$at completed stale ;" | "$at completed startup_failure ;") return 1 ;;
+    "$at queued null ;" | "$at in_progress null ;" | "$at requested null ;" | "$at waiting null ;" | \
+      "$at pending null ;") return 1 ;;
     *) return 2 ;;
   esac
 }
@@ -187,7 +192,8 @@ checked() { # <változónév> <env-név> <alapérték> <minta>
 }
 checked wait_max GG_DISPATCH_WAIT_SECONDS 5400 '^[1-9][0-9]{0,8}$'
 checked call_max GG_DISPATCH_CALL_SECONDS 60 '^[1-9][0-9]{0,8}$'
-checked poll GG_DISPATCH_POLL_SECONDS 30 '^[0-9]{1,9}$'
+# vezető nulla nélkül: a `08` a bash aritmetikájában hibás oktális szám, a gh pedig elutasítja
+checked poll GG_DISPATCH_POLL_SECONDS 30 '^(0|[1-9][0-9]{0,8})$'
 
 # A lista beolvasása és ellenőrzése egy menetben, még az indítások előtt, hogy a hibás sor
 # egyszer és hangosan jelenjen meg, ne csendben maradjon ki. Tabok mentén darabolunk, az üres
@@ -236,6 +242,19 @@ if [[ "${#rows_repo[@]}" -eq 0 ]]; then
   exit 1
 fi
 
+# Hány sor kerül sorra ebben a körben. A ciklus után ezt összevetjük a ténylegesen megkezdett
+# sorokkal: ha egy futásidejű shellhiba (például egy aritmetikai hiba) megszakítaná a ciklust, a
+# kör nem zárulhat „minden indítás sikeres” üzenettel.
+expected=0
+seen=0
+for freq in $want; do
+  i=0
+  while [[ "$i" -lt "${#rows_every[@]}" ]]; do
+    [[ "${rows_every[$i]}" == "$freq" ]] && expected=$((expected + 1))
+    i=$((i + 1))
+  done
+done
+
 for freq in $want; do
   i=0
   while [[ "$i" -lt "${#rows_repo[@]}" ]]; do
@@ -246,6 +265,7 @@ for freq in $want; do
     when="${rows_when[$i]}"
     i=$((i + 1))
     [[ "$every" == "$freq" ]] || continue
+    seen=$((seen + 1))
     full="$owner/$repo"
     case "$when" in
       "") ;;
@@ -315,7 +335,7 @@ for freq in $want; do
       log "figyelmeztetés: a gh run watch $rc-gyel kilépett, de a futás nem ért véget (${state:-állapot ismeretlen}), újra figyelem: $url"
       left=$((deadline - SECONDS))
       [[ "$left" -gt 0 ]] || { rc=142; break; }
-      sleep "$((poll < left ? poll : left))"
+      sleep "$((poll < left ? poll : left))" 9>&-
     done
     if [[ "$rc" -eq 0 ]]; then
       log "kész: success: $url"
@@ -329,6 +349,11 @@ for freq in $want; do
     fi
   done
 done
+
+if [[ "$seen" -ne "$expected" ]]; then
+  log "HIBA: a kör idő előtt megszakadt: $expected sorból csak $seen került sorra"
+  failed=1
+fi
 
 if [[ "$failed" -ne 0 ]]; then
   log "vége: volt hiba"
