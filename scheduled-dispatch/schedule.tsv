@@ -1,9 +1,18 @@
 # A gg-mb launchd-indítójának listája (IT-1808). Egy sor = egy workflow_dispatch.
-# Oszlopok TAB-bal: repó (GuestGuru/ alatt)  workflow-fájl  ref  gyakoriság
+# Oszlopok TAB-bal: repó (GuestGuru/ alatt)  workflow-fájl  ref  gyakoriság  [feltétel]
 # gyakoriság: nightly (minden éjjel) | weekly (hétfőn, a nightly sorok után)
-# A sorok egymás után futnak: a következő csak az előző futás végén indul.
+# feltétel (elhagyható, IT-2165): changed = a sor kimarad, ha a workflow legutóbb indult
+#   kísérlete az ág mostani fején befejeződött és sikeres; elindul, ha a kód változott az utolsó
+#   zöld futás óta, ha a fejen még nem volt futás, ha a legutóbbi kísérlet nem sikeres vagy még
+#   tart, vagy ha ez nem állapítható meg. Üresen a sor minden alkalommal indul. A feltételhez a
+#   ref ágnév legyen.
+# A hibás sort (mezőszám, üres mező, ismeretlen gyakoriság) az indító hibaként naplózza és kihagyja.
+# A sorok egymás után indulnak: a következő az előző futás végén jön. Ha a várakozási keret
+# lejár, az indítás nem válaszol időben, vagy a gh nem adja vissza a futás URL-jét, az indító
+# továbblép, miközben az a futás még tarthat.
 gg3-app	e2e-full.yml	main	nightly
-gg-brain	integration-tests.yml	main	weekly
-gg-ops	hatchet-smoke.yml	main	weekly
-gg-tracker	wide-tests.yml	main	weekly
-ainita	e2e-wide.yml	main	weekly
+gg-inbox	db-tests.yml	main	nightly	changed
+gg-brain	integration-tests.yml	main	weekly	changed
+gg-ops	hatchet-smoke.yml	main	weekly	changed
+gg-tracker	wide-tests.yml	main	weekly	changed
+ainita	e2e-wide.yml	main	weekly	changed

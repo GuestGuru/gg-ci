@@ -131,6 +131,8 @@ const approvedWorkflowInventories: Record<string, Record<string, string>> = {
 	'GuestGuru/gg-inbox': {
 		'.github/workflows/ci.yml':
 			'50dc4d16f056ad02ad806eb2a9d99e659ea1d3c890f22c56fb40622bb436adb3',
+		'.github/workflows/db-tests.yml':
+			'c5f80c3ee19662e2afd61c3cb04a888f8cb97e7fd5b364b69801b6c621671023',
 		'.github/workflows/preview-alias.yml':
 			'1418d6e621b765dddea1bf50ba57fa0617a2d93c5ba12f5c502f23203533291f',
 		'.github/workflows/preview-db.yml':

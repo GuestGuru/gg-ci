@@ -310,13 +310,66 @@ Wide (slow) test suites are not scheduled with `schedule:` triggers: a cron job 
 `workflow_dispatch` at 01:30 UTC, and the run lands on the self-hosted runner. If gg-mb is
 down, that night is skipped.
 
-- **The list** is `scheduled-dispatch/schedule.tsv` (repo, workflow file, ref, `nightly`|`weekly`).
-  `weekly` rows run on Monday (UTC) after the nightly ones.
+- **The list** is `scheduled-dispatch/schedule.tsv` (repo, workflow file, ref, `nightly`|`weekly`,
+  and an optional condition). `weekly` rows run on Monday (UTC) after the nightly ones.
+- **Only after a change (IT-2165):** a row whose fifth column is `changed` is skipped when the
+  most recently started attempt of its workflow on the current head of the branch has completed
+  successfully. So a suite runs again after new commits, on a head that has no run yet, and
+  whenever the latest attempt on the head is not a success or is still running, even if an
+  earlier run on the same commit was green: a red suite keeps running on its schedule until it
+  is green. Unchanged green code is not tested again. A skipped row is logged
+  (`kihagyva, a fej legutóbbi futása sikeres: …`), and no workflow run is created. Rows without
+  a condition are dispatched every time.
+  - The check reads the head of the branch (`git/ref/heads/<ref>`), then the workflow's runs
+    filtered by `head_sha` and `branch`, and looks at the one whose `run_started_at` is the latest.
+    A re-run updates `run_started_at` of its run, so the latest attempt decides, not the run that
+    was created last, and an attempt that is still running cannot be hidden behind an older
+    green run. A run on another branch is not evidence.
+  - The fields are compared inside the jq filter, on the JSON values, and the filter answers with
+    one fixed word. It answers `green` only if every run in the list has a well-formed UTC start
+    time, exactly one run has the latest start time, and that run is on the head SHA and the
+    branch with status `completed` and conclusion `success`. The row is skipped only for `green`,
+    and only if the head is still the same commit when it is read again just before the skip.
+    Otherwise the row is dispatched: quietly when the head has no run (`none`), or the latest
+    attempt is still running (`active`) or has a known non-success conclusion (`red`); with a
+    notice when the branch moved during the check; and with a warning when a call errors or
+    times out, the run list does not fit on one page (`truncated`), a start time is missing or
+    malformed or two attempts share it (`ambiguous`), or the answer is anything else. An extra
+    run is cheaper than a suite that silently never runs.
+  - The ref of a `changed` row must be a branch name made of letters, digits, `.`, `_`, `/` and
+    `-` (it is written into the filter); any other ref is dispatched with a warning. The whole
+    workflow run is the evidence, so do not use `changed` for a workflow whose manual runs can
+    be narrowed with inputs, or whose run can succeed without running the tests.
+- **A malformed row** (fewer than four or more than five fields, an empty repo, workflow or ref,
+  an unknown frequency) cannot be dispatched: it is logged once as an error, the other rows run,
+  and the script exits 1. Empty fields are kept, so a missing value cannot shift the columns.
+  An unknown condition is an error too, but that row is dispatched unconditionally. The list on
+  `main` is also checked by the test suite.
+- **Deadlines:** every `gh` call runs under a supervising process (`bounded` in `dispatch.sh`)
+  that sends SIGTERM at the deadline, SIGKILL five seconds later, and reports 142 (a command's
+  own exit status 142 is reported as 1), so a call can outlast its limit by at most those five
+  seconds. The command gets its own process group and the signals go to the whole group, so a
+  `GG_DISPATCH_GH` wrapper that starts `gh` as a child is stopped together with it. The lookups
+  and the dispatch get
+  `GG_DISPATCH_CALL_SECONDS` (60) each. A plain `alarm` before `exec` does not work here: the Go
+  runtime catches SIGALRM and `gh` keeps running (measured 2026-11-27). An override that is not
+  a plain decimal number without a leading zero (`GG_DISPATCH_WAIT_SECONDS`,
+  `GG_DISPATCH_CALL_SECONDS`, `GG_DISPATCH_POLL_SECONDS`) is replaced by the default with a
+  warning, so a typo can neither switch a deadline off nor abort the round.
 - **One run at a time:** `dispatch.sh` takes the run URL that `gh workflow run` prints and waits
   for exactly that run (`gh run watch --exit-status`, at most `GG_DISPATCH_WAIT_SECONDS`, 90 min)
-  before dispatching the next row. A failed dispatch or run does not stop the rest; the script
-  exits 1 at the end. A second dispatcher refuses to start while one runs (a `flock` on
-  `dispatch.lock`, released with the process, so a crash leaves no stale lock).
+  before dispatching the next row. A dispatch call that hits its deadline is not retried,
+  because the run may have been created. Two workflows can therefore overlap in three cases:
+  the wait hit its limit, the dispatch call timed out although GitHub accepted it, or the
+  dispatch returned no run URL; the dispatcher moves on while that run may still be going. A
+  failed dispatch or run does not stop the rest; the script exits 1 at the end. The script
+  counts the rows that are due and the rows it finished: if a shell error cuts the loop short it
+  says so (`a kör idő előtt megszakadt`) and exits 1 instead of reporting success, and if the
+  shell itself exits before the end, an exit trap logs that. A second dispatcher
+  refuses to start while one runs (a `flock` on `dispatch.lock`). Only the dispatcher process
+  holds the lock: the supervised `gh` calls, the subshells around them and the sleep between two
+  watches close it, so it is released when the dispatcher exits or is killed, even if something
+  it started is still running.
 - **01:30 UTC all year:** launchd only knows local time, so the agent fires every hour at :30
   in `scheduled` mode, and the script proceeds only when the UTC hour is `01`.
 - **The caller workflow** has only a `workflow_dispatch` trigger and
