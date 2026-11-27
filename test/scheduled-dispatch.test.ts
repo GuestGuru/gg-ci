@@ -213,6 +213,7 @@ describe.runIf(hasJq || process.env.CI)('scheduled-dispatch: dispatch.sh', { tim
 		expect(result.status).toBe(1)
 		// mindkét sor elindult, és mindkettő a saját keretének lejártakor adta fel a várakozást
 		expect(dispatchedWorkflows()).toEqual(['x.yml', 'y.yml'])
+		expect(calls('run watch')).toHaveLength(2)
 		expect(result.stdout.split('\n').filter((line) => line.includes('2 mp után sem ért véget'))).toHaveLength(2)
 	})
 
@@ -367,24 +368,22 @@ describe.runIf(hasJq || process.env.CI)('scheduled-dispatch: dispatch.sh', { tim
 
 	// Fail-open: kihagyni csak pozitív bizonyítékra szabad. Ha a változás nem állapítható meg, a sor
 	// elindul — egy fölös futás olcsóbb, mint egy csendben kimaradó tesztsor. A fejen minden esetben
-	// van zöld futás, tehát a sor kimaradna, ha a hibás ág nem érvényesülne.
+	// van zöld futás, tehát a sor kimaradna, ha a hibás ág nem érvényesülne. A shell a szűrőtől
+	// egyetlen rögzített szót fogad el zöldként; a nyers válaszok itt a szűrő helyett jönnek.
 	it.each([
 		['the head lookup fails', {}, { HEAD_FAIL_AT: 'all' }],
 		['the head lookup returns no commit SHA', { heads: ['null'] }, {}],
 		['the run lookup fails', {}, { RUNS_FAIL: '1' }],
 		['the run lookup prints a green answer but exits non-zero', {}, { RUNS_EXIT: '1' }],
 		['the run lookup returns nothing', {}, { RUNS_RAW: '' }],
-		['the answer is green for another commit', {}, { RUNS_RAW: `${otherSha} main completed success ;` }],
-		['the answer is green for another branch', {}, { RUNS_RAW: `${headSha} feature completed success ;` }],
-		['the answer is green but not completed', {}, { RUNS_RAW: `${headSha} main in_progress success ;` }],
-		['the conclusion only starts with success', {}, { RUNS_RAW: `${headSha} main completed successful ;` }],
-		['the conclusion is missing', {}, { RUNS_RAW: `${headSha} main completed  ;` }],
-		['the conclusion is unknown', {}, { RUNS_RAW: `${headSha} main completed weird ;` }],
-		['the answer is green but lacks the terminator', {}, { RUNS_RAW: `${headSha} main completed success` }],
-		['the answer is a count instead of a run', {}, { RUNS_RAW: '3' }],
+		['the answer only starts with green', {}, { RUNS_RAW: 'greenish' }],
+		['the answer is green with a different case', {}, { RUNS_RAW: 'Green' }],
+		['the answer has something after green', {}, { RUNS_RAW: 'green success' }],
+		['the answer is a run projection instead of a verdict', {}, { RUNS_RAW: `${headSha} main completed success` }],
+		['the answer is a count instead of a verdict', {}, { RUNS_RAW: '3' }],
 		['the history is reported as truncated', {}, { RUNS_RAW: 'truncated' }],
 		['the latest attempt is reported as ambiguous', {}, { RUNS_RAW: 'ambiguous' }],
-		['the status is unknown', {}, { RUNS_RAW: `${headSha} main sleeping null ;` }],
+		['the latest attempt is reported as unexpected', {}, { RUNS_RAW: 'unexpected' }],
 	])('dispatches a changed row with a warning when %s', (_name, state, extra) => {
 		conditionalList()
 		fixtures([record(day(21), 'success')], (state as { heads?: string[] }).heads)
@@ -393,6 +392,24 @@ describe.runIf(hasJq || process.env.CI)('scheduled-dispatch: dispatch.sh', { tim
 		expect(result.status, result.stdout + result.stderr).toBe(0)
 		expect(result.stdout).toContain(undetermined)
 		expect(result.stdout).not.toContain('kihagyva')
+	})
+
+	// A szűrő rögzített válaszai közül csak a `green` hagy ki; a többi ismert válasz csendben indít.
+	it.each([['none'], ['red'], ['active']])('dispatches a changed row quietly when the verdict is %s', (verdict) => {
+		conditionalList()
+		const result = run(['nightly'], { RUNS_RAW: verdict })
+		expect(result.status, result.stdout + result.stderr).toBe(0)
+		expect(dispatchedWorkflows()).toEqual(['x.yml', 'y.yml'])
+		expect(result.stdout).not.toContain('nem állapítható meg')
+	})
+
+	it('rejects a ref that cannot be put into the filter unquoted, and dispatches the row', () => {
+		writeFileSync(join(tmp, 'list.tsv'), ['a\tx.yml\tma"in\tnightly\tchanged', ''].join('\n'))
+		fixtures([record(day(21), 'success', { head_branch: 'ma"in' })])
+		const result = run(['nightly'], {})
+		expect(calls('api')).toEqual([])
+		expect(calls('workflow run')).toEqual(['workflow run x.yml -R GuestGuru/a --ref ma"in'])
+		expect(result.stdout).toContain('nem állapítható meg')
 	})
 
 	// Ha a futások listájából nem derül ki egyértelműen a legutóbbi kísérlet, az indító nem
@@ -415,11 +432,16 @@ describe.runIf(hasJq || process.env.CI)('scheduled-dispatch: dispatch.sh', { tim
 		['a start time is an empty string', [record(day(21), 'success'), record(day(22), 'failure', { run_started_at: '' })]],
 		['the start time of a green run is a number', [record(day(21), 'success', { run_started_at: 1764200000 })]],
 		['the start time is not a UTC timestamp', [record(day(21), 'success', { run_started_at: '2026-11-21 01:30' })]],
-		[
-			// a parancshelyettesítés a kimenet végi sortörést levágná: a lezáró jel miatt ez nem zöld
-			'the conclusion is success followed by a newline',
-			[record(day(21), 'success\n')],
-		],
+		['a start time is the zero date', [record(day(21), 'success'), record('0000-00-00T00:00:00Z', 'failure')]],
+		['a start time ends with a newline', [record(day(21), 'success', { run_started_at: `${day(21)}\n` })]],
+		// A mezőket a jq hasonlítja össze a JSON-értékeken: amit a shell levágna vagy elnyelne
+		// (kimenet végi sortörés, NUL bájt), az nem adhat zöld választ.
+		['the conclusion is success followed by a newline', [record(day(21), 'success\n')]],
+		['the conclusion contains a NUL byte', [record(day(21), 'succ\u0000ess')]],
+		['the status is completed followed by a newline', [record(day(21), 'success', { status: 'completed\n' })]],
+		['the status is unknown', [record(day(21), 'success', { status: 'sleeping' })]],
+		['the conclusion is unknown', [record(day(21), 'weird')]],
+		['a completed run has no conclusion', [record(day(21), null, { status: 'completed' })]],
 	])('dispatches a changed row with a warning when %s', (_name, runs) => {
 		conditionalList()
 		fixtures(runs)
@@ -428,6 +450,21 @@ describe.runIf(hasJq || process.env.CI)('scheduled-dispatch: dispatch.sh', { tim
 		expect(result.status, result.stdout + result.stderr).toBe(0)
 		expect(result.stdout).toContain(undetermined)
 		expect(result.stdout).not.toContain('kihagyva')
+	})
+
+	// Ha a GitHub nem alkalmazná a kérés szűrőit, a legutóbbi kísérlet más commitra vagy ágra
+	// szólhatna: a szűrő ezt maga is ellenőrzi, és nem fogadja el zöldnek.
+	it.each([
+		['another commit', { head_sha: otherSha }],
+		['another branch', { head_branch: 'feature' }],
+		['a branch that differs only in case', { head_branch: 'Main' }],
+	])('dispatches with a warning when the latest attempt returned is green but for %s', (_name, over) => {
+		conditionalList()
+		fixtures([record(day(20), 'success'), record(day(21), 'success', over)])
+		const result = run(['nightly'], { RUNS_IGNORE_FILTERS: '1' })
+		expect(result.status, result.stdout + result.stderr).toBe(0)
+		expect(dispatchedWorkflows()).toEqual(['x.yml', 'y.yml'])
+		expect(result.stdout).toContain(undetermined)
 	})
 
 	// A lógó hívás 300 mp-ig tartana, és a SIGALRM-ot figyelmen kívül hagyja, mint a valódi gh. Ha
@@ -467,6 +504,17 @@ describe.runIf(hasJq || process.env.CI)('scheduled-dispatch: dispatch.sh', { tim
 		conditionalList()
 		fixtures([record(day(21), 'success')])
 		const result = run(['nightly'], { GG_DISPATCH_CALL_SECONDS: '2', HEAD_SLEEP: '300', HANG_IGNORE_TERM: '1' })
+		expect(result.status, result.stdout + result.stderr).toBe(0)
+		expect(dispatchedWorkflows()).toEqual(['x.yml', 'y.yml'])
+		expect(result.stdout).toContain(undetermined)
+	})
+
+	// Ha a GG_DISPATCH_GH egy burkolószkript, amely a gh-t gyerekként indítja, a közvetlen gyerek
+	// leállítása nem elég: a lógó unoka nyitva tartaná a kimenetet. A keret az egész csoportra szól.
+	it('stops a hanging call that runs as a child of the command, not as the command itself', () => {
+		conditionalList()
+		fixtures([record(day(21), 'success')])
+		const result = run(['nightly'], { GG_DISPATCH_CALL_SECONDS: '3', HEAD_SLEEP: '300', HANG_AS_CHILD: '1' })
 		expect(result.status, result.stdout + result.stderr).toBe(0)
 		expect(dispatchedWorkflows()).toEqual(['x.yml', 'y.yml'])
 		expect(result.stdout).toContain(undetermined)
@@ -537,10 +585,10 @@ describe.runIf(hasJq || process.env.CI)('scheduled-dispatch: dispatch.sh', { tim
 			env: env({ WATCH_FLAKY: '1', VIEW_STATE: 'in_progress ', GG_DISPATCH_POLL_SECONDS: '10' }),
 			stdio: 'ignore',
 		})
-		for (let i = 0; i < 200 && calls('run view').length === 0; i++) await new Promise((resolve) => setTimeout(resolve, 50))
-		expect(calls('run view')).toHaveLength(1)
-		// a `run view` válasza után jön a napló és az alvás: adunk neki időt, hogy elaludjon
-		await new Promise((resolve) => setTimeout(resolve, 1000))
+		// megvárjuk, amíg az indítónak tényleg van alvó gyereke (nem a `run view` fut még)
+		const sleeping = () => spawnSync('pgrep', ['-P', String(first.pid), '-x', 'sleep']).status === 0
+		for (let i = 0; i < 200 && !sleeping(); i++) await new Promise((resolve) => setTimeout(resolve, 50))
+		expect(sleeping()).toBe(true)
 		first.kill('SIGKILL')
 		await new Promise((resolve) => first.once('exit', resolve))
 		const second = run(['weekly'], {})

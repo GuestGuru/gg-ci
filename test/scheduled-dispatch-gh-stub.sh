@@ -11,8 +11,12 @@
 #                         head_sha, branch, status, per_page) és rendezésével (a legújabb elöl).
 #                         RUNS_FAIL: a hívás hibázik. RUNS_RAW: a szűrő helyett ezt írja ki.
 #                         RUNS_EXIT: a válasz kiírása után ezzel a kóddal lép ki.
+#                         RUNS_IGNORE_FILTERS: a kérés commit- és ágszűrőjét figyelmen kívül hagyja
+#                         (mintha a GitHub nem szűrne), a repó és a workflow szűrője marad.
 # HEAD_SLEEP, RUNS_SLEEP, WATCH_SLEEP, VIEW_SLEEP: a megfelelő hívás lóg; RUN_SLEEP_FIRST: az első
 # indítás lóg. HANG_IGNORE_TERM: a lógó hívás a SIGTERM-et is figyelmen kívül hagyja.
+# HANG_AS_CHILD: a lógás egy gyerekfolyamatban történik (mint egy burkolószkriptnél, amely a
+# gh-t `exec` nélkül indítja): a stub leállítása önmagában nem zárná le a kimenetét.
 #
 # `workflow run`: a futás URL-jét írja ki (mint a valódi, nem terminálon), az azonosító 1000 + az
 # indítás sorszáma; a FAIL_REPO-ra hibázik (RUN_EXIT kóddal, alapból 1), a NOURL_REPO-ra URL nélkül
@@ -36,6 +40,10 @@ printf '%s\n' "$bracketed" >> "$GH_ARGV"
 hang() {
   trap '' ALRM
   if [[ -n "${HANG_IGNORE_TERM:-}" ]]; then trap '' TERM; fi
+  if [[ -n "${HANG_AS_CHILD:-}" ]]; then
+    sleep "$1"
+    exit 0
+  fi
   exec sleep "$1"
 }
 
@@ -69,8 +77,14 @@ if [[ "$1" == api ]]; then
       workflow="${workflow%/runs}"
       param() { printf '%s\n' "$query" | tr '&' '\n' | sed -n "s/^$1=//p" | head -n 1; }
       per_page="$(param per_page)"
-      jq --arg repo "$repo" --arg workflow "$workflow" --arg sha "$(param head_sha)" \
-        --arg branch "$(param branch)" --arg status "$(param status)" --argjson n "${per_page:-30}" '
+      sha="$(param head_sha)"
+      branch="$(param branch)"
+      if [[ -n "${RUNS_IGNORE_FILTERS:-}" ]]; then
+        sha=""
+        branch=""
+      fi
+      jq --arg repo "$repo" --arg workflow "$workflow" --arg sha "$sha" \
+        --arg branch "$branch" --arg status "$(param status)" --argjson n "${per_page:-30}" '
         [ .[]
           | select(.repository.full_name == $repo and .path == (".github/workflows/" + $workflow))
           | select($sha == "" or .head_sha == $sha)

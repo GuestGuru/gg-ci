@@ -7,8 +7,9 @@
 #   tart, vagy ha ez nem állapítható meg. Üresen a sor minden alkalommal indul. A feltételhez a
 #   ref ágnév legyen.
 # A hibás sort (mezőszám, üres mező, ismeretlen gyakoriság) az indító hibaként naplózza és kihagyja.
-# A sorok egymás után indulnak: a következő az előző futás végén jön, vagy amikor a várakozási
-# keret lejár (az a futás ilyenkor még tarthat).
+# A sorok egymás után indulnak: a következő az előző futás végén jön. Ha a várakozási keret
+# lejár, az indítás nem válaszol időben, vagy a gh nem adja vissza a futás URL-jét, az indító
+# továbblép, miközben az a futás még tarthat.
 gg3-app	e2e-full.yml	main	nightly
 gg-inbox	db-tests.yml	main	nightly	changed
 gg-brain	integration-tests.yml	main	weekly	changed
