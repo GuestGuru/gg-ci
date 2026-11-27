@@ -16,9 +16,16 @@
 # átmeneti API-hiba után újrafigyel), csak utána jön a következő. Ha egy indítás vagy futás hibázik, a többit akkor is
 # végigviszi, és a végén 1-gyel lép ki.
 #
+# A lista ötödik, elhagyható oszlopa a feltétel (IT-2165). `changed`: a sor csak akkor indul,
+# ha a ref mostani fején még nincs sikeres futása a workflow-nak — vagyis ha a kód változott
+# az utolsó zöld futás óta, vagy a fejen eddig csak sikertelen futás volt. Változatlan kódon a
+# futás csak ugyanazt bizonyítaná újra. Az ellenőrzés két olvasó API-hívás; ha bármelyik
+# hibázik, időtúllép vagy értelmezhetetlent ad, a sor elindul: egy fölös futás olcsóbb, mint
+# egy csendben kimaradó tesztsor. Üres feltétellel a sor minden alkalommal indul.
+#
 # Hitelesítés: a gg-mb helyi `gh` bejelentkezése (~/.config/gh/hosts.yml).
 # Felülírható (főleg a teszthez): GG_DISPATCH_LIST, GG_DISPATCH_WAIT_SECONDS (5400),
-# GG_DISPATCH_POLL_SECONDS (30), GG_DISPATCH_WEEKDAY (`date -u +%u`),
+# GG_DISPATCH_POLL_SECONDS (30), GG_DISPATCH_CHECK_SECONDS (60), GG_DISPATCH_WEEKDAY (`date -u +%u`),
 # GG_DISPATCH_HOUR (`date -u +%H`), GG_DISPATCH_UTC_HOUR (01), GG_DISPATCH_GH (gh),
 # GG_DISPATCH_OWNER (GuestGuru), GG_DISPATCH_LOCK, GG_DISPATCH_RUN_NOW.
 set -uo pipefail
@@ -27,6 +34,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 list="${GG_DISPATCH_LIST:-$script_dir/schedule.tsv}"
 wait_max="${GG_DISPATCH_WAIT_SECONDS:-5400}"
 poll="${GG_DISPATCH_POLL_SECONDS:-30}"
+check_max="${GG_DISPATCH_CHECK_SECONDS:-60}"
 weekday="${GG_DISPATCH_WEEKDAY:-$(date -u +%u)}"
 hour="${GG_DISPATCH_HOUR:-$(date -u +%H)}"
 utc_hour="${GG_DISPATCH_UTC_HOUR:-01}"
@@ -36,6 +44,23 @@ lock="${GG_DISPATCH_LOCK:-$script_dir/dispatch.lock}"
 run_now="${GG_DISPATCH_RUN_NOW:-$script_dir/run-now}"
 
 log() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
+
+# A `changed` feltétel: van-e már sikeres futása a workflow-nak a ref mostani fején?
+#   0 = van (a sor kimarad), 1 = nincs (indítani kell), 2 = nem állapítható meg.
+# A fej SHA-ja a `head_sha` változóba kerül. Mindkét hívás csak olvas, és a perl alarm
+# GG_DISPATCH_CHECK_SECONDS után leállítja, hogy egy beragadt API ne tartsa fel a többi sort.
+head_sha=""
+green_on_head() {
+  local full="$1" workflow="$2" ref="$3" count
+  head_sha="$(perl -e 'alarm shift; exec @ARGV' "$check_max" \
+    "$gh_bin" api "repos/$full/commits/$ref" --jq .sha 9>&-)" || return 2
+  [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || return 2
+  count="$(perl -e 'alarm shift; exec @ARGV' "$check_max" \
+    "$gh_bin" api "repos/$full/actions/workflows/$workflow/runs?head_sha=$head_sha&status=success&per_page=1" \
+    --jq .total_count 9>&-)" || return 2
+  [[ "$count" =~ ^[0-9]+$ ]] || return 2
+  [[ "$count" -gt 0 ]]
+}
 
 mode="${1:-auto}"
 if [[ "$mode" == scheduled ]]; then
@@ -68,10 +93,28 @@ fi
 failed=0
 for freq in $want; do
   # a lista a 3-as leírón jön: a gh ne nyelje el a ciklus stdin-jét
-  while IFS=$'\t' read -r -u 3 repo workflow ref every _; do
+  while IFS=$'\t' read -r -u 3 repo workflow ref every when _; do
     [[ -z "$repo" || "$repo" == \#* ]] && continue
     [[ "$every" == "$freq" ]] || continue
     full="$owner/$repo"
+    case "$when" in
+      "") ;;
+      changed)
+        green_on_head "$full" "$workflow" "$ref"
+        case $? in
+          0)
+            log "kihagyva, nincs változás az utolsó sikeres futás óta: $full $workflow@$ref (${head_sha:0:9})"
+            continue
+            ;;
+          1) ;;
+          *) log "figyelmeztetés: nem állapítható meg, változott-e, ezért elindul: $full $workflow@$ref" ;;
+        esac
+        ;;
+      *)
+        log "HIBA: ismeretlen feltétel ($when), a sor feltétel nélkül indul: $full $workflow@$ref"
+        failed=1
+        ;;
+    esac
     # A gh (nem terminálon) a létrehozott futás URL-jét írja ki: ezt és csak ezt követjük.
     if ! out="$("$gh_bin" workflow run "$workflow" -R "$full" --ref "$ref" 9>&-)"; then
       log "HIBA: nem indult: $full $workflow@$ref"

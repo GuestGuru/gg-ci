@@ -310,8 +310,20 @@ Wide (slow) test suites are not scheduled with `schedule:` triggers: a cron job 
 `workflow_dispatch` at 01:30 UTC, and the run lands on the self-hosted runner. If gg-mb is
 down, that night is skipped.
 
-- **The list** is `scheduled-dispatch/schedule.tsv` (repo, workflow file, ref, `nightly`|`weekly`).
-  `weekly` rows run on Monday (UTC) after the nightly ones.
+- **The list** is `scheduled-dispatch/schedule.tsv` (repo, workflow file, ref, `nightly`|`weekly`,
+  and an optional condition). `weekly` rows run on Monday (UTC) after the nightly ones.
+- **Only after a change (IT-2165):** a row whose fifth column is `changed` is dispatched only if
+  its workflow has no successful run yet on the current head of the ref. Unchanged code is not
+  tested again; new commits are, and so is a head whose runs so far have all failed (a red
+  suite keeps running on its schedule until it is green). A skipped row is logged
+  (`kihagyva, nincs változás az utolsó sikeres futás óta: …`), and no workflow run is created. The
+  check is two read-only API calls per row (`commits/<ref>`, then the workflow's runs filtered by
+  `head_sha` and `status=success`), each limited to `GG_DISPATCH_CHECK_SECONDS` (60). It fails
+  open: if either call errors, times out or returns something unexpected, the row is dispatched,
+  because an extra run is cheaper than a suite that silently never runs. An unknown condition is
+  reported as an error and the row is dispatched as well. Any successful run of the workflow on
+  that commit counts, whatever triggered it, so do not use `changed` for a workflow whose manual
+  runs can be narrowed with inputs. Rows without a condition are dispatched every time.
 - **One run at a time:** `dispatch.sh` takes the run URL that `gh workflow run` prints and waits
   for exactly that run (`gh run watch --exit-status`, at most `GG_DISPATCH_WAIT_SECONDS`, 90 min)
   before dispatching the next row. A failed dispatch or run does not stop the rest; the script
