@@ -312,21 +312,33 @@ down, that night is skipped.
 
 - **The list** is `scheduled-dispatch/schedule.tsv` (repo, workflow file, ref, `nightly`|`weekly`,
   and an optional condition). `weekly` rows run on Monday (UTC) after the nightly ones.
-- **Only after a change (IT-2165):** a row whose fifth column is `changed` is dispatched only if
-  its workflow has no successful run yet on the current head of the ref. Unchanged code is not
-  tested again; new commits are, and so is a head whose runs so far have all failed (a red
-  suite keeps running on its schedule until it is green). A skipped row is logged
-  (`kihagyva, nincs változás az utolsó sikeres futás óta: …`), and no workflow run is created. The
-  check is two read-only API calls per row (`commits/<ref>`, then the workflow's runs filtered by
-  `head_sha` and `status=success`), each limited to `GG_DISPATCH_CHECK_SECONDS` (60). It fails
-  open: if either call errors, times out or returns something unexpected, the row is dispatched,
-  because an extra run is cheaper than a suite that silently never runs. An unknown condition is
-  reported as an error and the row is dispatched as well. Any successful run of the workflow on
-  that commit counts, whatever triggered it, so do not use `changed` for a workflow whose manual
-  runs can be narrowed with inputs. Rows without a condition are dispatched every time.
+- **Only after a change (IT-2165):** a row whose fifth column is `changed` is skipped when the
+  latest completed run of its workflow on the current head of the branch succeeded. So a suite
+  runs again after new commits, on a head that has no completed run yet, and whenever the latest
+  completed run on the head is not a success, even if an earlier run on the same commit was
+  green: a red suite keeps running on its schedule until it is green. Unchanged green code is
+  not tested again. A skipped row is logged (`kihagyva, a fej legutóbbi futása sikeres: …`), and
+  no workflow run is created. Rows without a condition are dispatched every time.
+  - The check is two read-only API calls per row, each limited to `GG_DISPATCH_CALL_SECONDS`
+    (60): `git/ref/heads/<ref>` for the head, then the workflow's runs filtered by `head_sha`,
+    `branch` and `status=completed` with `per_page=1`. Runs are listed newest first, so that one
+    element is the latest completed run; a run in progress does not count, and neither does a
+    run dispatched on another branch.
+  - It only skips on positive evidence: the answer must be exactly the head SHA with the
+    conclusion `success`. It fails open: if a call errors, times out or returns anything else,
+    the row is dispatched with a warning, because an extra run is cheaper than a suite that
+    silently never runs. An unknown condition is reported as an error and the row is dispatched
+    as well.
+  - The ref of a `changed` row must be a branch name. The whole workflow run is the evidence,
+    so do not use `changed` for a workflow whose manual runs can be narrowed with inputs, or
+    whose run can succeed without running the tests.
+  - A commit that lands on the branch between the two calls and the skip is picked up by the
+    next scheduled run; the dispatcher does not re-check the head.
 - **One run at a time:** `dispatch.sh` takes the run URL that `gh workflow run` prints and waits
   for exactly that run (`gh run watch --exit-status`, at most `GG_DISPATCH_WAIT_SECONDS`, 90 min)
-  before dispatching the next row. A failed dispatch or run does not stop the rest; the script
+  before dispatching the next row. The dispatch call itself is limited to
+  `GG_DISPATCH_CALL_SECONDS`; after a timeout it is not retried, because the run may have been
+  created. A failed dispatch or run does not stop the rest; the script
   exits 1 at the end. A second dispatcher refuses to start while one runs (a `flock` on
   `dispatch.lock`, released with the process, so a crash leaves no stale lock).
 - **01:30 UTC all year:** launchd only knows local time, so the agent fires every hour at :30

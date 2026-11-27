@@ -7,8 +7,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 // A bő tesztsorok gg-mb-s indítója (IT-1808): a lista formátuma, és a dispatch.sh
 // hamis `gh`-val — a saját futását várja ki, a hibás indítás nem állítja meg a többit,
 // a kilépési kód 1, a weekly sorok csak hétfőn mennek, a zár nem marad bent, és a
-// launchd-mód csak 01 UTC-kor indít. A `changed` feltételű sor (IT-2165) kimarad, ha a ref
-// fején már van sikeres futás, és elindul, ha nincs, vagy ha ez nem állapítható meg.
+// launchd-mód csak 01 UTC-kor indít. A `changed` feltételű sor (IT-2165) kimarad, ha az ág
+// fején a legutóbbi befejezett futás sikeres, és elindul, ha nem az, ha még nem volt, vagy ha
+// ez nem állapítható meg.
 
 const dir = new URL('../scheduled-dispatch/', import.meta.url).pathname
 const dispatch = join(dir, 'dispatch.sh')
@@ -50,27 +51,34 @@ describe('scheduled-dispatch: schedule.tsv', () => {
 // lóg, WATCH_FLAKY mellett az első hívása hibázik; a `run view` a VIEW_STATE-et adja,
 // VIEW_SLEEP mellett lóg. Minden hívás a GH_CALLS fájlba íródik.
 // Az `api` a `changed` feltétel két olvasó hívása (a valódi gh a --jq szűrő eredményét írja ki):
-// a `…/commits/<ref>` a HEAD_SHA-t adja, a `…/runs?…` a sikeres futások számát — a GREEN_REPO-ra
-// 1-et, másra 0-t, RUNS_OUTPUT mellett azt. A HEAD_FAIL_REPO-ra, ill. a RUNS_FAIL_REPO-ra a
-// megfelelő hívás hibázik; API_SLEEP mellett minden `api` hívás lóg.
+// a `…/git/ref/heads/<ág>` a HEAD_SHA-t adja; a `…/runs?…` a legutóbbi befejezett futást
+// "<sha> <eredmény>" alakban — a GREEN_REPO-ra "<HEAD_SHA> success", másra "null null" (nincs
+// befejezett futás), RUNS_OUTPUT mellett azt. A HEAD_FAIL_REPO-ra, ill. a RUNS_FAIL_REPO-ra a
+// megfelelő hívás hibázik; RUNS_EXIT mellett a futások hívása kiírja a választ, de ezzel a kóddal
+// lép ki. HEAD_SLEEP, ill. RUNS_SLEEP mellett a megfelelő hívás lóg; RUN_SLEEP_FIRST mellett az
+// első indítás.
 const ghStub = `#!/bin/bash
 echo "$*" >> "$GH_CALLS"
 if [[ "$1" == api ]]; then
-	[[ -n "\${API_SLEEP:-}" ]] && exec sleep "$API_SLEEP"
 	case "$2" in
-		*/commits/*)
+		*/git/ref/heads/*)
+			[[ -n "\${HEAD_SLEEP:-}" ]] && exec sleep "$HEAD_SLEEP"
 			[[ "$2" == *"$HEAD_FAIL_REPO/"* ]] && exit 1
 			echo "$HEAD_SHA" ;;
 		*/runs\\?*)
+			[[ -n "\${RUNS_SLEEP:-}" ]] && exec sleep "$RUNS_SLEEP"
 			[[ "$2" == *"$RUNS_FAIL_REPO/"* ]] && exit 1
 			if [[ -n "\${RUNS_OUTPUT+set}" ]]; then echo "$RUNS_OUTPUT"
-			elif [[ "$2" == *"$GREEN_REPO/"* ]]; then echo 1
-			else echo 0; fi ;;
+			elif [[ "$2" == *"$GREEN_REPO/"* ]]; then echo "$HEAD_SHA success"
+			else echo "null null"; fi
+			exit "\${RUNS_EXIT:-0}" ;;
 	esac
 	exit 0
 fi
 case "$1 $2" in
 	"workflow run")
+		# csak az első indítás lóg, a többi rendben megy
+		[[ -n "\${RUN_SLEEP_FIRST:-}" && "$(grep -c "^workflow run" "$GH_CALLS")" == 1 ]] && exec sleep "$RUN_SLEEP_FIRST"
 		[[ "$*" == *"$FAIL_REPO"* ]] && exit 1
 		[[ "$*" == *"$NOURL_REPO"* ]] && exit 0
 		echo "https://github.com/$5/actions/runs/$((1000 + $(grep -c "^workflow run" "$GH_CALLS")))" ;;
@@ -129,8 +137,15 @@ describe('scheduled-dispatch: dispatch.sh', { timeout: 20_000 }, () => {
 		GREEN_REPO: 'nothing',
 		...extra,
 	})
+	// A szinkron gyerekfolyamatot a Vitest időkerete nem tudja megszakítani, ezért sajátot kap:
+	// ha az indító beragadna (pl. egy időkeret nélküli hívásban), a futás itt ér véget, státusz nélkül.
 	const run = (args: string[], extra: Record<string, string>) =>
-		spawnSync('bash', [dispatch, ...args], { encoding: 'utf8', env: env(extra) })
+		spawnSync('bash', [dispatch, ...args], {
+			encoding: 'utf8',
+			env: env(extra),
+			timeout: 60_000,
+			killSignal: 'SIGKILL',
+		})
 	const calls = (prefix: string) =>
 		readFileSync(join(tmp, 'calls'), 'utf8')
 			.split('\n')
@@ -266,60 +281,97 @@ describe('scheduled-dispatch: dispatch.sh', { timeout: 20_000 }, () => {
 			join(tmp, 'list.tsv'),
 			['a\tx.yml\tmain\tnightly\tchanged', 'b\ty.yml\tmain\tnightly', ''].join('\n'),
 		)
+	const dispatchedWorkflows = () => calls('workflow run').map((line) => line.split(' ')[2])
+	const skipped = 'kihagyva, a fej legutóbbi futása sikeres: GuestGuru/a x.yml@main (aaaaaaaaa)'
+	const undetermined =
+		'figyelmeztetés: nem állapítható meg, sikeres-e a fej legutóbbi futása, ezért elindul: GuestGuru/a x.yml@main'
 
-	it('skips a changed row whose workflow already succeeded on the head of the ref', () => {
+	it('skips a changed row when the latest completed run on the head of the branch succeeded', () => {
 		conditionalList()
 		const result = run(['nightly'], { GREEN_REPO: 'GuestGuru/a' })
 		expect(result.status, result.stdout + result.stderr).toBe(0)
-		// pontosan ez a két olvasó hívás megy ki, és csak a feltételes sorra
+		// Pontosan ez a két olvasó hívás megy ki, és csak a feltételes sorra: az ág feje, majd a
+		// workflow legutóbbi BEFEJEZETT futása ezen a commiton és ezen az ágon.
 		expect(calls('api')).toEqual([
-			'api repos/GuestGuru/a/commits/main --jq .sha',
-			`api repos/GuestGuru/a/actions/workflows/x.yml/runs?head_sha=${headSha}&status=success&per_page=1 --jq .total_count`,
+			'api repos/GuestGuru/a/git/ref/heads/main --jq .object.sha',
+			`api repos/GuestGuru/a/actions/workflows/x.yml/runs?head_sha=${headSha}&branch=main&status=completed&per_page=1 --jq .workflow_runs[0] | "\\(.head_sha) \\(.conclusion)"`,
 		])
-		expect(calls('workflow run')).toEqual(['workflow run y.yml -R GuestGuru/b --ref main'])
-		expect(result.stdout).toContain(
-			'kihagyva, nincs változás az utolsó sikeres futás óta: GuestGuru/a x.yml@main (aaaaaaaaa)',
-		)
+		expect(dispatchedWorkflows()).toEqual(['y.yml'])
+		expect(result.stdout).toContain(skipped)
 	})
 
-	it('dispatches a changed row when the head of the ref has no successful run yet', () => {
+	// Nem bukás: a fejen egyszerűen nincs zöld bizonyíték, ezért a sor figyelmeztetés nélkül indul.
+	// A futások listája a legújabbal kezd (élesben mérve), így a „zöld után piros ugyanazon a
+	// commiton” esetben a GitHub a pirosat adja vissza: a sor újra elindul, a korábbi zöld ellenére.
+	it.each([
+		['the head has no completed run yet', 'null null'],
+		['the latest completed run on the head failed, even after an earlier success', `${headSha} failure`],
+		['the latest completed run on the head was cancelled', `${headSha} cancelled`],
+	])('dispatches a changed row without a warning when %s', (_name, runsOutput) => {
 		conditionalList()
-		const result = run(['nightly'], {})
+		const result = run(['nightly'], { GREEN_REPO: 'GuestGuru/a', RUNS_OUTPUT: runsOutput })
 		expect(result.status, result.stdout + result.stderr).toBe(0)
-		expect(calls('workflow run')).toEqual([
-			'workflow run x.yml -R GuestGuru/a --ref main',
-			'workflow run y.yml -R GuestGuru/b --ref main',
-		])
+		expect(dispatchedWorkflows()).toEqual(['x.yml', 'y.yml'])
 		expect(result.stdout).not.toContain('kihagyva')
 		expect(result.stdout).not.toContain('nem állapítható meg')
 	})
 
-	// Fail-open: ha a változás nem állapítható meg, a sor elindul — egy fölös futás olcsóbb, mint
-	// egy csendben kimaradó tesztsor. A GREEN_REPO mindegyik esetben zöldet jelezne, ha odáig jutna.
+	// Fail-open: kihagyni csak pozitív bizonyítékra szabad. Ha a változás nem állapítható meg, a sor
+	// elindul — egy fölös futás olcsóbb, mint egy csendben kimaradó tesztsor. A GREEN_REPO minden
+	// esetben zöldet jelezne, ha a hibás ág nem érvényesülne.
 	it.each([
 		['the head lookup fails', { HEAD_FAIL_REPO: 'GuestGuru/a' }],
 		['the head lookup returns no commit SHA', { HEAD_SHA: 'null' }],
 		['the run lookup fails', { RUNS_FAIL_REPO: 'GuestGuru/a' }],
-		['the run lookup returns no number', { RUNS_OUTPUT: 'null' }],
+		['the run lookup prints a green answer but exits non-zero', { RUNS_EXIT: '1' }],
 		['the run lookup returns nothing', { RUNS_OUTPUT: '' }],
-	])('dispatches a changed row when %s', (_name, extra) => {
+		['the run lookup returns a success for another commit', { RUNS_OUTPUT: `${'b'.repeat(40)} success` }],
+		['the run lookup returns the head without a conclusion', { RUNS_OUTPUT: `${headSha} ` }],
+		['the run lookup returns only a success-like prefix', { RUNS_OUTPUT: `${headSha} successful` }],
+		['the run lookup returns a count instead of a run', { RUNS_OUTPUT: '3' }],
+	])('dispatches a changed row with a warning when %s', (_name, extra) => {
 		conditionalList()
 		const result = run(['nightly'], { GREEN_REPO: 'GuestGuru/a', ...extra })
+		expect(dispatchedWorkflows()).toEqual(['x.yml', 'y.yml'])
 		expect(result.status, result.stdout + result.stderr).toBe(0)
-		expect(calls('workflow run').map((line) => line.split(' ')[2])).toEqual(['x.yml', 'y.yml'])
-		expect(result.stdout).toContain(
-			'figyelmeztetés: nem állapítható meg, változott-e, ezért elindul: GuestGuru/a x.yml@main',
-		)
 	})
 
-	it('gives up on a hanging lookup after GG_DISPATCH_CHECK_SECONDS and dispatches the row', () => {
+	it.each([
+		['the head lookup fails', { HEAD_FAIL_REPO: 'GuestGuru/a' }],
+		['the run lookup returns a success for another commit', { RUNS_OUTPUT: `${'b'.repeat(40)} success` }],
+		['the run lookup returns nothing', { RUNS_OUTPUT: '' }],
+	])('logs that the state is undetermined when %s', (_name, extra) => {
 		conditionalList()
-		const started = Date.now()
-		const result = run(['nightly'], { GREEN_REPO: 'GuestGuru/a', API_SLEEP: '30', GG_DISPATCH_CHECK_SECONDS: '1' })
-		expect(Date.now() - started).toBeLessThan(15_000)
+		const result = run(['nightly'], { GREEN_REPO: 'GuestGuru/a', ...extra })
+		expect(result.stdout).toContain(undetermined)
+	})
+
+	// A lógó hívás 300 mp-ig tartana: ha az indító nem szabna neki keretet, a futtató 60 mp-es
+	// saját kerete állítaná le (státusz nélkül), és a teszt elbukna. Faliórát nem mérünk.
+	it.each([
+		['head lookup', { HEAD_SLEEP: '300' }],
+		['run lookup', { RUNS_SLEEP: '300' }],
+	])('gives up on a hanging %s after GG_DISPATCH_CALL_SECONDS and dispatches the row', (_name, extra) => {
+		conditionalList()
+		const result = run(['nightly'], { GREEN_REPO: 'GuestGuru/a', GG_DISPATCH_CALL_SECONDS: '1', ...extra })
 		expect(result.status, result.stdout + result.stderr).toBe(0)
-		expect(calls('workflow run').map((line) => line.split(' ')[2])).toEqual(['x.yml', 'y.yml'])
-		expect(result.stdout).toContain('nem állapítható meg')
+		expect(dispatchedWorkflows()).toEqual(['x.yml', 'y.yml'])
+		expect(result.stdout).toContain(undetermined)
+	})
+
+	it('gives up on a hanging dispatch after GG_DISPATCH_CALL_SECONDS, does not retry it, and goes on', () => {
+		const result = run(['nightly'], { GG_DISPATCH_CALL_SECONDS: '1', RUN_SLEEP_FIRST: '300' })
+		expect(result.status).toBe(1)
+		expect(calls('workflow run')).toEqual([
+			'workflow run x.yml -R GuestGuru/a --ref main',
+			'workflow run y.yml -R GuestGuru/b --ref main',
+		])
+		expect(result.stdout).toContain(
+			'HIBA: az indítás 1 mp alatt nem válaszolt (a futás ettől még létrejöhetett), továbblépek: GuestGuru/a x.yml@main',
+		)
+		// a lógó indítás futását nem figyeljük (nincs URL-je), a következő sorét igen
+		expect(calls('run watch')).toHaveLength(1)
+		expect(result.stdout).toContain('kész: success')
 	})
 
 	it('reports an unknown condition, still dispatches the row and exits non-zero', () => {
@@ -348,6 +400,29 @@ describe('scheduled-dispatch: dispatch.sh', { timeout: 20_000 }, () => {
 		expect(calls('api')).toHaveLength(2)
 		// hétfőn a nightly sor újra megy, a zöld fejű weekly sor kimarad
 		expect(calls('workflow run')).toHaveLength(2)
-		expect(monday.stdout).toContain('kihagyva, nincs változás az utolsó sikeres futás óta: GuestGuru/c z.yml@main')
+		expect(monday.stdout).toContain('kihagyva, a fej legutóbbi futása sikeres: GuestGuru/c z.yml@main')
+	})
+
+	// --- a lista sorvégei: egyik miatt sem maradhat ki csendben egy sor ---
+
+	it('dispatches the last row even when the list does not end with a newline', () => {
+		writeFileSync(join(tmp, 'list.tsv'), 'a\tx.yml\tmain\tnightly\nb\ty.yml\tmain\tnightly\tchanged')
+		const result = run(['nightly'], {})
+		expect(result.status, result.stdout + result.stderr).toBe(0)
+		expect(dispatchedWorkflows()).toEqual(['x.yml', 'y.yml'])
+		// a feltétel az utolsó, sortörés nélküli sorban is érvényes
+		expect(calls('api')).toHaveLength(2)
+	})
+
+	it('reads a list with CRLF line endings: the frequency and the condition still match', () => {
+		writeFileSync(
+			join(tmp, 'list.tsv'),
+			['# komment', 'a\tx.yml\tmain\tnightly', 'b\ty.yml\tmain\tnightly\tchanged', ''].join('\r\n'),
+		)
+		const result = run(['nightly'], { GREEN_REPO: 'GuestGuru/b' })
+		expect(result.status, result.stdout + result.stderr).toBe(0)
+		expect(dispatchedWorkflows()).toEqual(['x.yml'])
+		expect(result.stdout).toContain('kihagyva, a fej legutóbbi futása sikeres: GuestGuru/b y.yml@main')
+		expect(result.stdout).not.toContain('ismeretlen feltétel')
 	})
 })

@@ -1,9 +1,10 @@
 # A gg-mb launchd-indítójának listája (IT-1808). Egy sor = egy workflow_dispatch.
 # Oszlopok TAB-bal: repó (GuestGuru/ alatt)  workflow-fájl  ref  gyakoriság  [feltétel]
 # gyakoriság: nightly (minden éjjel) | weekly (hétfőn, a nightly sorok után)
-# feltétel (elhagyható, IT-2165): changed = csak akkor indul, ha a ref mostani fején még nincs
-#   sikeres futása a workflow-nak (a kód változott az utolsó zöld futás óta, vagy a fejen eddig
-#   csak sikertelen futás volt). Üresen a sor minden alkalommal indul.
+# feltétel (elhagyható, IT-2165): changed = a sor kimarad, ha a workflow legutóbbi befejezett
+#   futása az ág mostani fején sikeres; elindul, ha a kód változott az utolsó zöld futás óta, ha
+#   a fejen még nem volt befejezett futás, vagy ha a legutóbbi nem sikeres. Üresen a sor minden
+#   alkalommal indul. A feltételhez a ref ágnév legyen.
 # A sorok egymás után futnak: a következő csak az előző futás végén indul.
 gg3-app	e2e-full.yml	main	nightly
 gg-inbox	db-tests.yml	main	nightly	changed
